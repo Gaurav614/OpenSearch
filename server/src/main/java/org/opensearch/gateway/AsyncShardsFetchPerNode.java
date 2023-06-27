@@ -21,12 +21,14 @@ import java.util.Map;
  * This class is responsible for fetching shard data from nodes. It is analogous to AsyncShardFetch class since it fetches
  * the data in asynchronous manner too.
  * @param <T>
+ *
+ * @opensearch.internal
  */
 public abstract class AsyncShardsFetchPerNode<T extends BaseNodeResponse> implements Releasable {
     /**
      * An action that lists the relevant shard data that needs to be fetched.
      */
     public interface Lister<NodesResponse extends BaseNodesResponse<NodeResponse>, NodeResponse extends BaseNodeResponse> {
-        void list(DiscoveryNode[] nodes, Map<ShardId, String> shardsIdMap, ActionListener<NodesResponse> listener);
+        void list(DiscoveryNode[] nodes, Map<ShardId, String> shardIdsWithCustomDataPath, ActionListener<NodesResponse> listener);
     }
 }
