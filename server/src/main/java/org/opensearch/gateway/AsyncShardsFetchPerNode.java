@@ -17,7 +17,6 @@ import org.opensearch.index.shard.ShardId;
 
 import java.util.Map;
 
-
 /**
  * This class is responsible for fetching shard data from nodes. It is analogous to AsyncShardFetch class except
  * that we fetch batch of shards in this class from single transport request to a node.

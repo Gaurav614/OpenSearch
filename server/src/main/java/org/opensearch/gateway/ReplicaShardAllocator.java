@@ -386,7 +386,8 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
                 && shard.unassignedInfo().getFailedNodeIds().contains(discoNode.getId())) {
                 continue;
             }
-            TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata storeFilesMetadata = nodeStoreEntry.getValue().storeFilesMetadata();
+            TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata storeFilesMetadata = nodeStoreEntry.getValue()
+                .storeFilesMetadata();
             // we don't have any files at all, it is an empty index
             if (storeFilesMetadata.isEmpty()) {
                 continue;

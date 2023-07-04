@@ -156,7 +156,6 @@ public class TransportNodesListShardStoreMetadata extends TransportNodesAction<
         );
     }
 
-
     /**
      * The request
      *
@@ -287,7 +286,10 @@ public class TransportNodesListShardStoreMetadata extends TransportNodesAction<
             storeFilesMetadata = new TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata(in);
         }
 
-        public NodeStoreFilesMetadata(DiscoveryNode node, TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata storeFilesMetadata) {
+        public NodeStoreFilesMetadata(
+            DiscoveryNode node,
+            TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata storeFilesMetadata
+        ) {
             super(node);
             this.storeFilesMetadata = storeFilesMetadata;
         }

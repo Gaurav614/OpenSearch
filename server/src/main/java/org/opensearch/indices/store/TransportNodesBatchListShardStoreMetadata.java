@@ -48,13 +48,17 @@ public class TransportNodesBatchListShardStoreMetadata extends TransportNodesAct
     TransportNodesBatchListShardStoreMetadata.Request,
     TransportNodesBatchListShardStoreMetadata.NodesStoreFilesMetadata,
     TransportNodesBatchListShardStoreMetadata.NodeRequest,
-    TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch> implements
-    AsyncShardsFetchPerNode.Lister<
-        TransportNodesBatchListShardStoreMetadata.NodesStoreFilesMetadata,
-        TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch> {
+    TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch>
+    implements
+        AsyncShardsFetchPerNode.Lister<
+            TransportNodesBatchListShardStoreMetadata.NodesStoreFilesMetadata,
+            TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch> {
 
     public static final String ACTION_NAME = "internal:cluster/nodes/indices/shard/store/batch";
-    public static final ActionType<TransportNodesListShardStoreMetadata.NodesStoreFilesMetadata> TYPE = new ActionType<>(ACTION_NAME, TransportNodesListShardStoreMetadata.NodesStoreFilesMetadata::new);
+    public static final ActionType<TransportNodesListShardStoreMetadata.NodesStoreFilesMetadata> TYPE = new ActionType<>(
+        ACTION_NAME,
+        TransportNodesListShardStoreMetadata.NodesStoreFilesMetadata::new
+    );
 
     private final Settings settings;
     private final IndicesService indicesService;
@@ -87,7 +91,11 @@ public class TransportNodesBatchListShardStoreMetadata extends TransportNodesAct
     }
 
     @Override
-    public void list(DiscoveryNode[] nodes,  Map<ShardId,String> shardIdsWithCustomDataPath, ActionListener<NodesStoreFilesMetadata> listener) {
+    public void list(
+        DiscoveryNode[] nodes,
+        Map<ShardId, String> shardIdsWithCustomDataPath,
+        ActionListener<NodesStoreFilesMetadata> listener
+    ) {
         execute(new TransportNodesBatchListShardStoreMetadata.Request(shardIdsWithCustomDataPath, nodes), listener);
     }
 
@@ -125,51 +133,39 @@ public class TransportNodesBatchListShardStoreMetadata extends TransportNodesAct
      */
     private Map<ShardId, NodeStoreFilesMetadata> listStoreMetadata(NodeRequest request) throws IOException {
         Map<ShardId, NodeStoreFilesMetadata> shardStoreMetadataMap = new HashMap<ShardId, NodeStoreFilesMetadata>();
-        for(Map.Entry<ShardId, String> shardToCustomDataPathEntry: request.getShardIdsWithCustomDataPath().entrySet()) {
+        for (Map.Entry<ShardId, String> shardToCustomDataPathEntry : request.getShardIdsWithCustomDataPath().entrySet()) {
             final ShardId shardId = shardToCustomDataPathEntry.getKey();
             try {
                 logger.debug("Listing store meta data for {}", shardId);
-                TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata nodeStoreFilesMetadata = TransportNodesListShardStoreMetadataHelper.getStoreFilesMetadata(
-                    logger,
-                    indicesService,
-                    clusterService,
-                    shardId,
-                    shardToCustomDataPathEntry.getValue(),
-                    settings,
-                    nodeEnv
-                );
-                shardStoreMetadataMap.put(
-                    shardId,
-                    new NodeStoreFilesMetadata(
-                        nodeStoreFilesMetadata,
-                        null
-                    )
-                );
+                TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata nodeStoreFilesMetadata =
+                    TransportNodesListShardStoreMetadataHelper.getStoreFilesMetadata(
+                        logger,
+                        indicesService,
+                        clusterService,
+                        shardId,
+                        shardToCustomDataPathEntry.getValue(),
+                        settings,
+                        nodeEnv
+                    );
+                shardStoreMetadataMap.put(shardId, new NodeStoreFilesMetadata(nodeStoreFilesMetadata, null));
             } catch (Exception storeFileFetchException) {
                 logger.trace(new ParameterizedMessage("Unable to fetch store files for shard [{}]", shardId), storeFileFetchException);
-                shardStoreMetadataMap.put(
-                    shardId,
-                    new NodeStoreFilesMetadata(
-                        null,
-                        storeFileFetchException
-                    )
-                );
+                shardStoreMetadataMap.put(shardId, new NodeStoreFilesMetadata(null, storeFileFetchException));
             }
         }
         logger.debug("Loaded store meta data for {} shards", shardStoreMetadataMap);
         return shardStoreMetadataMap;
     }
 
-
     /**
-     * The request
+     * Request is used in constructing the request for making the transport request to set of other node.
+     * Refer {@link TransportNodesAction} class start method.
      *
      * @opensearch.internal
      */
     public static class Request extends BaseNodesRequest<Request> {
 
         private final Map<ShardId, String> shardIdsWithCustomDataPath;
-
 
         public Request(StreamInput in) throws IOException {
             super(in);
@@ -184,7 +180,6 @@ public class TransportNodesBatchListShardStoreMetadata extends TransportNodesAct
         public Map<ShardId, String> getShardIdsWithCustomDataPath() {
             return shardIdsWithCustomDataPath;
         }
-
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
@@ -204,7 +199,11 @@ public class TransportNodesBatchListShardStoreMetadata extends TransportNodesAct
             super(in);
         }
 
-        public NodesStoreFilesMetadata(ClusterName clusterName, List<NodeStoreFilesMetadataBatch> nodes, List<FailedNodeException> failures) {
+        public NodesStoreFilesMetadata(
+            ClusterName clusterName,
+            List<NodeStoreFilesMetadataBatch> nodes,
+            List<FailedNodeException> failures
+        ) {
             super(clusterName, nodes, failures);
         }
 
@@ -239,7 +238,10 @@ public class TransportNodesBatchListShardStoreMetadata extends TransportNodesAct
             this.storeFileFetchException = null;
         }
 
-        public NodeStoreFilesMetadata(TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata storeFilesMetadata, Exception storeFileFetchException) {
+        public NodeStoreFilesMetadata(
+            TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata storeFilesMetadata,
+            Exception storeFileFetchException
+        ) {
             this.storeFilesMetadata = storeFilesMetadata;
             this.storeFileFetchException = storeFileFetchException;
         }
@@ -267,8 +269,8 @@ public class TransportNodesBatchListShardStoreMetadata extends TransportNodesAct
     }
 
     /**
-     * The node request
-     *
+     * NodeRequest class is for deserializing the  request received by this node from other node for this transport action.
+     * This is used in {@link TransportNodesAction}
      * @opensearch.internal
      */
     public static class NodeRequest extends TransportRequest {
@@ -295,14 +297,17 @@ public class TransportNodesBatchListShardStoreMetadata extends TransportNodesAct
         }
     }
 
-
+    /**
+     * NodeStoreFilesMetadataBatch Response received by the node from other node for this transport action.
+     * Refer {@link TransportNodesAction}
+     */
     public static class NodeStoreFilesMetadataBatch extends BaseNodeResponse {
         private final Map<ShardId, NodeStoreFilesMetadata> nodeStoreFilesMetadataBatch;
+
         protected NodeStoreFilesMetadataBatch(StreamInput in) throws IOException {
             super(in);
-            this.nodeStoreFilesMetadataBatch =  in.readMap(ShardId::new, NodeStoreFilesMetadata::new);
+            this.nodeStoreFilesMetadataBatch = in.readMap(ShardId::new, NodeStoreFilesMetadata::new);
         }
-
 
         public NodeStoreFilesMetadataBatch(DiscoveryNode node, Map<ShardId, NodeStoreFilesMetadata> nodeStoreFilesMetadataBatch) {
             super(node);
