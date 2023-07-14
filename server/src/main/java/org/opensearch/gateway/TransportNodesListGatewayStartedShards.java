@@ -32,7 +32,9 @@
 
 package org.opensearch.gateway;
 
+import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.opensearch.OpenSearchException;
+import org.opensearch.Version;
 import org.opensearch.action.ActionListener;
 import org.opensearch.action.ActionType;
 import org.opensearch.action.FailedNodeException;
@@ -42,6 +44,7 @@ import org.opensearch.action.support.nodes.BaseNodesRequest;
 import org.opensearch.action.support.nodes.BaseNodesResponse;
 import org.opensearch.action.support.nodes.TransportNodesAction;
 import org.opensearch.cluster.ClusterName;
+import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.Nullable;
@@ -51,8 +54,12 @@ import org.opensearch.common.io.stream.StreamOutput;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.NodeEnvironment;
-import org.opensearch.gateway.TransportNodesGatewayStartedShardHelper.NodeGatewayStartedShardInfo;
+import org.opensearch.index.IndexSettings;
+import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.ShardId;
+import org.opensearch.index.shard.ShardPath;
+import org.opensearch.index.shard.ShardStateMetadata;
+import org.opensearch.index.store.Store;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
 import org.opensearch.threadpool.ThreadPool;
@@ -144,17 +151,71 @@ public class TransportNodesListGatewayStartedShards extends TransportNodesAction
     protected NodeGatewayStartedShards nodeOperation(NodeRequest request) {
         try {
             final ShardId shardId = request.getShardId();
-            final NodeGatewayStartedShardInfo nodeGatewayStartedShardInfo = TransportNodesGatewayStartedShardHelper.getShardInfoOnLocalNode(
+            logger.trace("{} loading local shard state info", shardId);
+            ShardStateMetadata shardStateMetadata = ShardStateMetadata.FORMAT.loadLatestState(
                 logger,
-                shardId,
                 namedXContentRegistry,
-                nodeEnv,
-                indicesService,
-                request.getCustomDataPath(),
-                settings,
-                clusterService
+                nodeEnv.availableShardPaths(request.shardId)
             );
-            return new NodeGatewayStartedShards(clusterService.localNode(), nodeGatewayStartedShardInfo);
+            if (shardStateMetadata != null) {
+                if (indicesService.getShardOrNull(shardId) == null
+                    && shardStateMetadata.indexDataLocation == ShardStateMetadata.IndexDataLocation.LOCAL) {
+                    final String customDataPath;
+                    if (request.getCustomDataPath() != null) {
+                        customDataPath = request.getCustomDataPath();
+                    } else {
+                        // TODO: Fallback for BWC with older OpenSearch versions.
+                        // Remove once request.getCustomDataPath() always returns non-null
+                        final IndexMetadata metadata = clusterService.state().metadata().index(shardId.getIndex());
+                        if (metadata != null) {
+                            customDataPath = new IndexSettings(metadata, settings).customDataPath();
+                        } else {
+                            logger.trace("{} node doesn't have meta data for the requests index", shardId);
+                            throw new OpenSearchException("node doesn't have meta data for index " + shardId.getIndex());
+                        }
+                    }
+                    // we don't have an open shard on the store, validate the files on disk are openable
+                    ShardPath shardPath = null;
+                    try {
+                        shardPath = ShardPath.loadShardPath(logger, nodeEnv, shardId, customDataPath);
+                        if (shardPath == null) {
+                            throw new IllegalStateException(shardId + " no shard path found");
+                        }
+                        Store.tryOpenIndex(shardPath.resolveIndex(), shardId, nodeEnv::shardLock, logger);
+                    } catch (Exception exception) {
+                        final ShardPath finalShardPath = shardPath;
+                        logger.trace(
+                            () -> new ParameterizedMessage(
+                                "{} can't open index for shard [{}] in path [{}]",
+                                shardId,
+                                shardStateMetadata,
+                                (finalShardPath != null) ? finalShardPath.resolveIndex() : ""
+                            ),
+                            exception
+                        );
+                        String allocationId = shardStateMetadata.allocationId != null ? shardStateMetadata.allocationId.getId() : null;
+                        return new NodeGatewayStartedShards(
+                            clusterService.localNode(),
+                            allocationId,
+                            shardStateMetadata.primary,
+                            null,
+                            exception
+                        );
+                    }
+                }
+
+                logger.debug("{} shard state info found: [{}]", shardId, shardStateMetadata);
+                String allocationId = shardStateMetadata.allocationId != null ? shardStateMetadata.allocationId.getId() : null;
+                final IndexShard shard = indicesService.getShardOrNull(shardId);
+                return new NodeGatewayStartedShards(
+                    clusterService.localNode(),
+                    allocationId,
+                    shardStateMetadata.primary,
+                    shard != null ? shard.getLatestReplicationCheckpoint() : null
+                );
+            }
+            logger.trace("{} no local shard info found", shardId);
+            return new NodeGatewayStartedShards(clusterService.localNode(), null, false, null);
         } catch (Exception e) {
             throw new OpenSearchException("failed to load started shards", e);
         }
@@ -286,16 +347,25 @@ public class TransportNodesListGatewayStartedShards extends TransportNodesAction
      * @opensearch.internal
      */
     public static class NodeGatewayStartedShards extends BaseNodeResponse {
-        private final NodeGatewayStartedShardInfo nodeGatewayStartedShardInfo;
+        private final String allocationId;
+        private final boolean primary;
+        private final Exception storeException;
+        private final ReplicationCheckpoint replicationCheckpoint;
 
         public NodeGatewayStartedShards(StreamInput in) throws IOException {
             super(in);
-            nodeGatewayStartedShardInfo = new NodeGatewayStartedShardInfo(in);
-        }
-
-        public NodeGatewayStartedShards(DiscoveryNode localNode, NodeGatewayStartedShardInfo nodeGatewayStartedShardInfo) {
-            super(localNode);
-            this.nodeGatewayStartedShardInfo = nodeGatewayStartedShardInfo;
+            allocationId = in.readOptionalString();
+            primary = in.readBoolean();
+            if (in.readBoolean()) {
+                storeException = in.readException();
+            } else {
+                storeException = null;
+            }
+            if (in.getVersion().onOrAfter(Version.V_2_3_0) && in.readBoolean()) {
+                replicationCheckpoint = new ReplicationCheckpoint(in);
+            } else {
+                replicationCheckpoint = null;
+            }
         }
 
         public NodeGatewayStartedShards(
@@ -315,45 +385,87 @@ public class TransportNodesListGatewayStartedShards extends TransportNodesAction
             Exception storeException
         ) {
             super(node);
-            nodeGatewayStartedShardInfo = new NodeGatewayStartedShardInfo(allocationId, primary, replicationCheckpoint, storeException);
-
+            this.allocationId = allocationId;
+            this.primary = primary;
+            this.replicationCheckpoint = replicationCheckpoint;
+            this.storeException = storeException;
         }
 
         public String allocationId() {
-            return this.nodeGatewayStartedShardInfo.allocationId();
+            return this.allocationId;
         }
 
         public boolean primary() {
-            return this.nodeGatewayStartedShardInfo.primary();
+            return this.primary;
         }
 
         public ReplicationCheckpoint replicationCheckpoint() {
-            return this.nodeGatewayStartedShardInfo.replicationCheckpoint();
+            return this.replicationCheckpoint;
         }
 
         public Exception storeException() {
-            return this.nodeGatewayStartedShardInfo.storeException();
+            return this.storeException;
         }
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            this.nodeGatewayStartedShardInfo.writeTo(out);
+            out.writeOptionalString(allocationId);
+            out.writeBoolean(primary);
+            if (storeException != null) {
+                out.writeBoolean(true);
+                out.writeException(storeException);
+            } else {
+                out.writeBoolean(false);
+            }
+            if (out.getVersion().onOrAfter(Version.V_2_3_0)) {
+                if (replicationCheckpoint != null) {
+                    out.writeBoolean(true);
+                    replicationCheckpoint.writeTo(out);
+                } else {
+                    out.writeBoolean(false);
+                }
+            }
         }
 
         @Override
         public boolean equals(Object o) {
-            return this.nodeGatewayStartedShardInfo.equals(o);
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+
+            NodeGatewayStartedShards that = (NodeGatewayStartedShards) o;
+
+            return primary == that.primary
+                && Objects.equals(allocationId, that.allocationId)
+                && Objects.equals(storeException, that.storeException)
+                && Objects.equals(replicationCheckpoint, that.replicationCheckpoint);
         }
 
         @Override
         public int hashCode() {
-            return this.nodeGatewayStartedShardInfo.hashCode();
+            int result = (allocationId != null ? allocationId.hashCode() : 0);
+            result = 31 * result + (primary ? 1 : 0);
+            result = 31 * result + (storeException != null ? storeException.hashCode() : 0);
+            result = 31 * result + (replicationCheckpoint != null ? replicationCheckpoint.hashCode() : 0);
+            return result;
         }
 
         @Override
         public String toString() {
-            return this.nodeGatewayStartedShardInfo.toString();
+            StringBuilder buf = new StringBuilder();
+            buf.append("NodeGatewayStartedShards[").append("allocationId=").append(allocationId).append(",primary=").append(primary);
+            if (storeException != null) {
+                buf.append(",storeException=").append(storeException);
+            }
+            if (replicationCheckpoint != null) {
+                buf.append(",ReplicationCheckpoint=").append(replicationCheckpoint.toString());
+            }
+            buf.append("]");
+            return buf.toString();
         }
     }
 }
