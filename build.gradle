@@ -46,6 +46,7 @@ import org.gradle.plugins.ide.eclipse.model.EclipseJdt
 import org.gradle.plugins.ide.eclipse.model.SourceFolder
 import org.gradle.api.Project;
 import org.gradle.process.ExecResult;
+import org.opensearch.gradle.CheckCompatibilityTask
 
 import static org.opensearch.gradle.util.GradleUtils.maybeConfigure
 
@@ -53,8 +54,8 @@ plugins {
   id 'lifecycle-base'
   id 'opensearch.docker-support'
   id 'opensearch.global-build-info'
-  id "com.diffplug.spotless" version "6.17.0" apply false
-  id "org.gradle.test-retry" version "1.5.2" apply false
+  id "com.diffplug.spotless" version "6.19.0" apply false
+  id "org.gradle.test-retry" version "1.5.3" apply false
   id "test-report-aggregation"
   id 'jacoco-report-aggregation'
 }
@@ -225,8 +226,16 @@ tasks.register("verifyVersions") {
  */
 
 boolean bwc_tests_enabled = true
+
 /* place an issue link here when committing bwc changes */
-final String bwc_tests_disabled_issue = ""
+String bwc_tests_disabled_issue = ""
+
+/* there's no existing MacOS release, therefore disable bcw tests */
+if (Os.isFamily(Os.FAMILY_MAC)) {
+  bwc_tests_enabled = false
+  bwc_tests_disabled_issue = "https://github.com/opensearch-project/OpenSearch/issues/4173"
+}
+
 if (bwc_tests_enabled == false) {
   if (bwc_tests_disabled_issue.isEmpty()) {
     throw new GradleException("bwc_tests_disabled_issue must be set when bwc_tests_enabled == false")
@@ -634,4 +643,16 @@ tasks.withType(TestTaskReports).configureEach {
 
 tasks.named(JavaBasePlugin.CHECK_TASK_NAME) {
   dependsOn tasks.named('testAggregateTestReport', TestReport)
+}
+
+tasks.register('checkCompatibility', CheckCompatibilityTask) {
+  description('Checks the compatibility with child components')
+}
+
+allprojects { project ->
+  project.afterEvaluate {
+    if (project.tasks.findByName('publishToMavenLocal')) {
+      checkCompatibility.dependsOn(project.tasks.publishToMavenLocal)
+    }
+  }
 }

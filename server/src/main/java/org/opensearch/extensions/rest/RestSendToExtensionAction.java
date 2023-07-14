@@ -10,6 +10,7 @@ package org.opensearch.extensions.rest;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.opensearch.action.ActionModule.DynamicActionRegistry;
 import org.opensearch.client.node.NodeClient;
 import org.opensearch.common.bytes.BytesReference;
 import org.opensearch.common.io.stream.StreamInput;
@@ -18,6 +19,7 @@ import org.opensearch.extensions.DiscoveryExtensionNode;
 import org.opensearch.extensions.ExtensionsManager;
 import org.opensearch.rest.BaseRestHandler;
 import org.opensearch.rest.BytesRestResponse;
+import org.opensearch.rest.NamedRoute;
 import org.opensearch.rest.RestRequest;
 import org.opensearch.rest.RestRequest.Method;
 import org.opensearch.rest.RestStatus;
@@ -33,6 +35,7 @@ import java.security.Principal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
@@ -78,7 +81,8 @@ public class RestSendToExtensionAction extends BaseRestHandler {
     public RestSendToExtensionAction(
         RegisterRestActionsRequest restActionsRequest,
         DiscoveryExtensionNode discoveryExtensionNode,
-        TransportService transportService
+        TransportService transportService,
+        DynamicActionRegistry dynamicActionRegistry
     ) {
         this.pathPrefix = "/_extensions/_" + restActionsRequest.getUniqueId();
         RestRequest.Method method;
@@ -86,15 +90,30 @@ public class RestSendToExtensionAction extends BaseRestHandler {
 
         List<Route> restActionsAsRoutes = new ArrayList<>();
         for (String restAction : restActionsRequest.getRestActions()) {
-            int delim = restAction.indexOf(' ');
+            Optional<String> name = Optional.empty();
+            String[] parts = restAction.split(" ");
+            if (parts.length < 2) {
+                throw new IllegalArgumentException("REST action must contain at least a REST method and route");
+            }
             try {
-                method = RestRequest.Method.valueOf(restAction.substring(0, delim));
-                path = pathPrefix + restAction.substring(delim).trim();
+                method = RestRequest.Method.valueOf(parts[0].trim());
+                path = pathPrefix + parts[1].trim();
+                if (parts.length > 2) {
+                    name = Optional.of(parts[2].trim());
+                }
             } catch (IndexOutOfBoundsException | IllegalArgumentException e) {
                 throw new IllegalArgumentException(restAction + " does not begin with a valid REST method");
             }
             logger.info("Registering: " + method + " " + path);
-            restActionsAsRoutes.add(new Route(method, path));
+            if (name.isPresent()) {
+                NamedRoute nr = new NamedRoute(method, path, name.get());
+                restActionsAsRoutes.add(nr);
+                dynamicActionRegistry.registerDynamicRoute(nr, this);
+            } else {
+                Route r = new Route(method, path);
+                restActionsAsRoutes.add(r);
+                dynamicActionRegistry.registerDynamicRoute(r, this);
+            }
         }
         this.routes = unmodifiableList(restActionsAsRoutes);
 
@@ -197,6 +216,10 @@ public class RestSendToExtensionAction extends BaseRestHandler {
             @Override
             public void handleException(TransportException exp) {
                 logger.debug("REST request failed", exp);
+                // On failure the original request params and content aren't consumed
+                // which gives misleading error messages, so we just consume them here
+                request.params().keySet().stream().forEach(p -> request.param(p));
+                request.content();
                 inProgressFuture.completeExceptionally(exp);
             }
 

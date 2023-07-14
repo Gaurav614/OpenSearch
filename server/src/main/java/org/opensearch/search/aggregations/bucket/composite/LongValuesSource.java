@@ -45,10 +45,10 @@ import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.PointRangeQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.lease.Releasables;
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.common.util.BitArray;
 import org.opensearch.common.util.LongArray;
+import org.opensearch.common.lease.Releasables;
 import org.opensearch.index.mapper.DateFieldMapper;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.NumberFieldMapper;
@@ -219,7 +219,7 @@ public class LongValuesSource extends SingleDimensionValuesSource<Long> {
         };
     }
 
-    private static Query extractQuery(Query query) {
+    static Query extractQuery(Query query) {
         if (query instanceof BoostQuery) {
             return extractQuery(((BoostQuery) query).getQuery());
         } else if (query instanceof IndexOrDocValuesQuery) {
@@ -234,7 +234,7 @@ public class LongValuesSource extends SingleDimensionValuesSource<Long> {
     /**
      * Returns true if we can use <code>query</code> with a {@link SortedDocsProducer} on <code>fieldName</code>.
      */
-    private static boolean checkMatchAllOrRangeQuery(Query query, String fieldName) {
+    static boolean checkMatchAllOrRangeQuery(Query query, String fieldName) {
         if (query == null) {
             return true;
         } else if (query.getClass() == MatchAllDocsQuery.class) {

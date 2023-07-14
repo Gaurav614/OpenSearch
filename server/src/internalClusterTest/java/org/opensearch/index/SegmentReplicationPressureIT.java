@@ -5,15 +5,16 @@
 
 package org.opensearch.index;
 
+import org.opensearch.action.admin.indices.replication.SegmentReplicationStatsResponse;
 import org.opensearch.action.bulk.BulkItemResponse;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.index.IndexRequest;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.UUIDs;
-import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.lease.Releasable;
 import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.IndexShardState;
@@ -37,6 +38,7 @@ import static java.util.Arrays.asList;
 import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
 import static org.opensearch.index.SegmentReplicationPressureService.MAX_INDEXING_CHECKPOINTS;
 import static org.opensearch.index.SegmentReplicationPressureService.MAX_REPLICATION_TIME_SETTING;
+import static org.opensearch.index.SegmentReplicationPressureService.SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
 
@@ -49,6 +51,7 @@ public class SegmentReplicationPressureIT extends SegmentReplicationBaseIT {
     protected Settings nodeSettings(int nodeOrdinal) {
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal))
+            .put(SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED.getKey(), true)
             .put(MAX_REPLICATION_TIME_SETTING.getKey(), TimeValue.timeValueSeconds(1))
             .put(MAX_INDEXING_CHECKPOINTS.getKey(), MAX_CHECKPOINTS_BEHIND)
             .build();
@@ -101,11 +104,28 @@ public class SegmentReplicationPressureIT extends SegmentReplicationBaseIT {
                     totalDocs.incrementAndGet();
                 });
             });
+            // Try to index one more doc.
+            expectThrows(OpenSearchRejectedExecutionException.class, () -> {
+                indexDoc();
+                totalDocs.incrementAndGet();
+                refresh(INDEX_NAME);
+            });
+
+            // Verify the rejected doc count.
+            SegmentReplicationStatsResponse segmentReplicationStatsResponse = dataNodeClient().admin()
+                .indices()
+                .prepareSegmentReplicationStats(INDEX_NAME)
+                .setDetailed(true)
+                .execute()
+                .actionGet();
+            SegmentReplicationPerGroupStats perGroupStats = segmentReplicationStatsResponse.getReplicationStats().get(INDEX_NAME).get(0);
+
+            assertEquals(perGroupStats.getRejectedRequestCount(), 2L);
         }
         refresh(INDEX_NAME);
-        // wait for the replicas to catch up after block is released.
-        waitForSearchableDocs(totalDocs.get(), replicaNodes.toArray(new String[] {}));
 
+        // wait for the replicas to catch up after block is released.
+        assertReplicaCheckpointUpdated(primaryShard);
         // index another doc showing there is no pressure enforced.
         indexDoc();
         refresh(INDEX_NAME);
@@ -159,7 +179,7 @@ public class SegmentReplicationPressureIT extends SegmentReplicationBaseIT {
         }
         refresh(INDEX_NAME);
         // wait for the replicas to catch up after block is released.
-        waitForSearchableDocs(totalDocs.get(), replicaNodes.toArray(new String[] {}));
+        assertReplicaCheckpointUpdated(primaryShard);
 
         // index another doc showing there is no pressure enforced.
         indexDoc();
@@ -238,6 +258,10 @@ public class SegmentReplicationPressureIT extends SegmentReplicationBaseIT {
     }
 
     public void testWithDocumentReplicationEnabledIndex() throws Exception {
+        assumeTrue(
+            "Can't create DocRep index with remote store enabled. Skipping.",
+            indexSettings().getAsBoolean(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, false) == false
+        );
         Settings settings = Settings.builder().put(MAX_REPLICATION_TIME_SETTING.getKey(), TimeValue.timeValueMillis(500)).build();
         // Starts a primary and replica node.
         final String primaryNode = internalCluster().startNode(settings);
@@ -293,7 +317,7 @@ public class SegmentReplicationPressureIT extends SegmentReplicationBaseIT {
         }
         refresh(INDEX_NAME);
         // wait for the replicas to catch up after block is released.
-        waitForSearchableDocs(totalDocs, replicaNodes.toArray(new String[] {}));
+        assertReplicaCheckpointUpdated(primaryShard);
 
         // index another doc showing there is no pressure enforced.
         executeBulkRequest(nodes, totalDocs);

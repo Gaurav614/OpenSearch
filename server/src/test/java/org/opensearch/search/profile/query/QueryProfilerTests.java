@@ -32,6 +32,7 @@
 
 package org.opensearch.search.profile.query;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.StringField;
@@ -64,19 +65,34 @@ import org.opensearch.search.profile.ProfileResult;
 import org.opensearch.test.OpenSearchTestCase;
 import org.junit.After;
 import org.junit.Before;
+import org.opensearch.threadpool.ThreadPool;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 
 public class QueryProfilerTests extends OpenSearchTestCase {
-
     private Directory dir;
     private IndexReader reader;
     private ContextIndexSearcher searcher;
+    private ExecutorService executor;
+
+    @ParametersFactory
+    public static Collection<Object[]> concurrency() {
+        return Arrays.asList(new Integer[] { 0 }, new Integer[] { 5 });
+    }
+
+    public QueryProfilerTests(int concurrency) {
+        this.executor = (concurrency > 0) ? Executors.newFixedThreadPool(concurrency) : null;
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -102,7 +118,7 @@ public class QueryProfilerTests extends OpenSearchTestCase {
             IndexSearcher.getDefaultQueryCache(),
             ALWAYS_CACHE_POLICY,
             true,
-            null
+            executor
         );
     }
 
@@ -116,6 +132,10 @@ public class QueryProfilerTests extends OpenSearchTestCase {
         assertThat(cache.getTotalCount(), equalTo(cache.getMissCount()));
         assertThat(cache.getCacheSize(), equalTo(0L));
 
+        if (executor != null) {
+            ThreadPool.terminate(executor, 10, TimeUnit.SECONDS);
+        }
+
         IOUtils.close(reader, dir);
         dir = null;
         reader = null;
@@ -123,7 +143,7 @@ public class QueryProfilerTests extends OpenSearchTestCase {
     }
 
     public void testBasic() throws IOException {
-        QueryProfiler profiler = new QueryProfiler(false);
+        QueryProfiler profiler = new QueryProfiler(executor != null);
         searcher.setProfiler(profiler);
         Query query = new TermQuery(new Term("foo", "bar"));
         searcher.search(query, 1);
@@ -149,7 +169,7 @@ public class QueryProfilerTests extends OpenSearchTestCase {
     }
 
     public void testNoScoring() throws IOException {
-        QueryProfiler profiler = new QueryProfiler(false);
+        QueryProfiler profiler = new QueryProfiler(executor != null);
         searcher.setProfiler(profiler);
         Query query = new TermQuery(new Term("foo", "bar"));
         searcher.search(query, 1, Sort.INDEXORDER); // scores are not needed
@@ -175,7 +195,7 @@ public class QueryProfilerTests extends OpenSearchTestCase {
     }
 
     public void testUseIndexStats() throws IOException {
-        QueryProfiler profiler = new QueryProfiler(false);
+        QueryProfiler profiler = new QueryProfiler(executor != null);
         searcher.setProfiler(profiler);
         Query query = new TermQuery(new Term("foo", "bar"));
         searcher.count(query); // will use index stats
@@ -189,7 +209,7 @@ public class QueryProfilerTests extends OpenSearchTestCase {
     }
 
     public void testApproximations() throws IOException {
-        QueryProfiler profiler = new QueryProfiler(false);
+        QueryProfiler profiler = new QueryProfiler(executor != null);
         searcher.setProfiler(profiler);
         Query query = new RandomApproximationQuery(new TermQuery(new Term("foo", "bar")), random());
         searcher.count(query);
@@ -218,14 +238,19 @@ public class QueryProfilerTests extends OpenSearchTestCase {
         TotalHitCountCollector collector = new TotalHitCountCollector();
         ProfileCollector profileCollector = new ProfileCollector(collector);
         assertEquals(0, profileCollector.getTime());
+        assertEquals(0, profileCollector.getSliceStartTime());
         final LeafCollector leafCollector = profileCollector.getLeafCollector(reader.leaves().get(0));
         assertThat(profileCollector.getTime(), greaterThan(0L));
+        assertThat(profileCollector.getSliceStartTime(), greaterThan(0L));
         long time = profileCollector.getTime();
+        long sliceStartTime = profileCollector.getSliceStartTime();
         leafCollector.setScorer(null);
         assertThat(profileCollector.getTime(), greaterThan(time));
+        assertEquals(sliceStartTime, profileCollector.getSliceStartTime());
         time = profileCollector.getTime();
         leafCollector.collect(0);
         assertThat(profileCollector.getTime(), greaterThan(time));
+        assertEquals(sliceStartTime, profileCollector.getSliceStartTime());
     }
 
     private static class DummyQuery extends Query {

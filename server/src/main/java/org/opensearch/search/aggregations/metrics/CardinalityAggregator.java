@@ -42,12 +42,12 @@ import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.hash.MurmurHash3;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.common.util.BitArray;
 import org.opensearch.common.util.LongArray;
 import org.opensearch.common.util.ObjectArray;
+import org.opensearch.common.lease.Releasable;
+import org.opensearch.common.lease.Releasables;
 import org.opensearch.index.fielddata.SortedBinaryDocValues;
 import org.opensearch.index.fielddata.SortedNumericDoubleValues;
 import org.opensearch.search.aggregations.Aggregator;
@@ -111,7 +111,7 @@ public class CardinalityAggregator extends NumericMetricsAggregator.SingleValue 
 
         if (valuesSource instanceof ValuesSource.Numeric) {
             ValuesSource.Numeric source = (ValuesSource.Numeric) valuesSource;
-            MurmurHash3Values hashValues = source.isFloatingPoint()
+            MurmurHash3Values hashValues = (source.isFloatingPoint() || source.isBigInteger())
                 ? MurmurHash3Values.hash(source.doubleValues(ctx))
                 : MurmurHash3Values.hash(source.longValues(ctx));
             numericCollectorsUsed++;

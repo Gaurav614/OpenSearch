@@ -19,14 +19,15 @@ import org.opensearch.action.support.PlainActionFuture;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.routing.ShardRoutingHelper;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.CancellableThreads;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.common.lease.Releasable;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.engine.DocIdSeqNoAndSource;
 import org.opensearch.index.engine.InternalEngine;
@@ -38,6 +39,9 @@ import org.opensearch.index.replication.OpenSearchIndexLevelReplicationTestCase;
 import org.opensearch.index.replication.TestReplicationSource;
 import org.opensearch.index.store.Store;
 import org.opensearch.index.store.StoreFileMetadata;
+import org.opensearch.index.translog.SnapshotMatchers;
+import org.opensearch.index.translog.Translog;
+import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.recovery.RecoverySettings;
 import org.opensearch.indices.recovery.RecoveryTarget;
 import org.opensearch.indices.replication.CheckpointInfoResponse;
@@ -176,6 +180,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
                 shards.index(new IndexRequest(index.getName()).id(String.valueOf(i)).source("{\"foo\": \"bar\"}", XContentType.JSON));
             }
 
+            assertEqualTranslogOperations(shards, primaryShard);
             primaryShard.refresh("Test");
             replicateSegments(primaryShard, shards.getReplicas());
 
@@ -189,7 +194,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
                     );
                 }
             }
-
+            assertEqualTranslogOperations(shards, primaryShard);
             primaryShard.refresh("Test");
             replicateSegments(primaryShard, shards.getReplicas());
             shards.assertAllEqual(numDocs);
@@ -204,6 +209,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
                     shards.delete(new DeleteRequest(index.getName()).id(String.valueOf(i)));
                 }
             }
+            assertEqualTranslogOperations(shards, primaryShard);
             primaryShard.refresh("Test");
             replicateSegments(primaryShard, shards.getReplicas());
             final List<DocIdSeqNoAndSource> docsAfterDelete = getDocIdAndSeqNos(primaryShard);
@@ -290,7 +296,13 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
     public void testRejectCheckpointOnShardRoutingPrimary() throws IOException {
         IndexShard primaryShard = newStartedShard(true);
         SegmentReplicationTargetService sut;
-        sut = prepareForReplication(primaryShard, null);
+        sut = prepareForReplication(
+            primaryShard,
+            null,
+            mock(TransportService.class),
+            mock(IndicesService.class),
+            mock(ClusterService.class)
+        );
         SegmentReplicationTargetService spy = spy(sut);
 
         // Starting a new shard in PrimaryMode and shard routing primary.
@@ -310,7 +322,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
         spy.onNewCheckpoint(new ReplicationCheckpoint(primaryShard.shardId(), 0L, 0L, 0L, Codec.getDefault().getName()), spyShard);
 
         // Verify that checkpoint is not processed as shard routing is primary.
-        verify(spy, times(0)).startReplication(any(), any(), any());
+        verify(spy, times(0)).startReplication(any(), any());
         closeShards(primaryShard);
     }
 
@@ -574,7 +586,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
             assertEqualCommittedSegments(primary, replica_1);
 
             shards.promoteReplicaToPrimary(replica_2).get();
-            primary.close("demoted", false);
+            primary.close("demoted", false, false);
             primary.store().close();
             IndexShard oldPrimary = shards.addReplicaWithExistingPath(primary.shardPath(), primary.routingEntry().currentNodeId());
             shards.recoverReplica(oldPrimary);
@@ -613,7 +625,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
 
                 // randomly resetart a replica
                 final IndexShard replicaToRestart = getRandomReplica(shards);
-                replicaToRestart.close("restart", false);
+                replicaToRestart.close("restart", false, false);
                 replicaToRestart.store().close();
                 shards.removeReplica(replicaToRestart);
                 final IndexShard newReplica = shards.addReplicaWithExistingPath(
@@ -711,7 +723,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
             shards.promoteReplicaToPrimary(nextPrimary).get();
 
             // close oldPrimary.
-            oldPrimary.close("demoted", false);
+            oldPrimary.close("demoted", false, false);
             oldPrimary.store().close();
 
             assertEquals(InternalEngine.class, nextPrimary.getEngine().getClass());
@@ -753,6 +765,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
             for (IndexShard shard : shards.getReplicas()) {
                 assertDocCounts(shard, numDocs, numDocs);
             }
+            assertEqualTranslogOperations(shards, oldPrimary);
 
             // 2. Create ops that are in the replica's xlog, not in the index.
             // index some more into both but don't replicate. replica will have only numDocs searchable, but should have totalDocs
@@ -761,6 +774,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
             final int totalDocs = numDocs + additonalDocs;
 
             assertDocCounts(oldPrimary, totalDocs, totalDocs);
+            assertEqualTranslogOperations(shards, oldPrimary);
             for (IndexShard shard : shards.getReplicas()) {
                 assertDocCounts(shard, totalDocs, numDocs);
             }
@@ -776,7 +790,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
             shards.promoteReplicaToPrimary(nextPrimary);
 
             // close and start the oldPrimary as a replica.
-            oldPrimary.close("demoted", false);
+            oldPrimary.close("demoted", false, false);
             oldPrimary.store().close();
             oldPrimary = shards.addReplicaWithExistingPath(oldPrimary.shardPath(), oldPrimary.routingEntry().currentNodeId());
             shards.recoverReplica(oldPrimary);
@@ -834,7 +848,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
                     long replicationId,
                     ReplicationCheckpoint checkpoint,
                     List<StoreFileMetadata> filesToFetch,
-                    Store store,
+                    IndexShard indexShard,
                     ActionListener<GetSegmentFilesResponse> listener
                 ) {
                     listener.onResponse(new GetSegmentFilesResponse(Collections.emptyList()));
@@ -859,7 +873,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
             assertEquals(nextPrimary.getEngine().getClass(), InternalEngine.class);
             nextPrimary.refresh("test");
 
-            oldPrimary.close("demoted", false);
+            oldPrimary.close("demoted", false, false);
             oldPrimary.store().close();
             IndexShard newReplica = shards.addReplicaWithExistingPath(oldPrimary.shardPath(), oldPrimary.routingEntry().currentNodeId());
             shards.recoverReplica(newReplica);
@@ -904,7 +918,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
                     long replicationId,
                     ReplicationCheckpoint checkpoint,
                     List<StoreFileMetadata> filesToFetch,
-                    Store store,
+                    IndexShard indexShard,
                     ActionListener<GetSegmentFilesResponse> listener
                 ) {
                     Assert.fail("Should not be reached");
@@ -944,7 +958,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
                     long replicationId,
                     ReplicationCheckpoint checkpoint,
                     List<StoreFileMetadata> filesToFetch,
-                    Store store,
+                    IndexShard indexShard,
                     ActionListener<GetSegmentFilesResponse> listener
                 ) {
                     // randomly resolve the listener, indicating the source has resolved.
@@ -986,7 +1000,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
                     long replicationId,
                     ReplicationCheckpoint checkpoint,
                     List<StoreFileMetadata> filesToFetch,
-                    Store store,
+                    IndexShard indexShard,
                     ActionListener<GetSegmentFilesResponse> listener
                 ) {}
             };
@@ -1004,6 +1018,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
             new RecoverySettings(Settings.EMPTY, new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)),
             mock(TransportService.class),
             sourceFactory,
+            null,
             null
         );
     }
@@ -1021,7 +1036,10 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
 
     private void resolveCheckpointInfoResponseListener(ActionListener<CheckpointInfoResponse> listener, IndexShard primary) {
         try {
-            final CopyState copyState = new CopyState(ReplicationCheckpoint.empty(primary.shardId, primary.getDefaultCodecName()), primary);
+            final CopyState copyState = new CopyState(
+                ReplicationCheckpoint.empty(primary.shardId, primary.getLatestReplicationCheckpoint().getCodec()),
+                primary
+            );
             listener.onResponse(
                 new CheckpointInfoResponse(copyState.getCheckpoint(), copyState.getMetadataMap(), copyState.getInfosBytes())
             );
@@ -1035,7 +1053,6 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
         throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
         final SegmentReplicationTarget target = targetService.startReplication(
-            ReplicationCheckpoint.empty(replica.shardId, replica.getDefaultCodecName()),
             replica,
             new SegmentReplicationTargetService.SegmentReplicationListener() {
                 @Override
@@ -1065,7 +1082,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
         IndexShard primary = shards.getPrimary();
         final IndexShard newPrimary = getRandomReplica(shards);
         shards.promoteReplicaToPrimary(newPrimary);
-        primary.close("demoted", true);
+        primary.close("demoted", true, false);
         primary.store().close();
         primary = shards.addReplicaWithExistingPath(primary.shardPath(), primary.routingEntry().currentNodeId());
         shards.recoverReplica(primary);
@@ -1081,6 +1098,22 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
             final Store.RecoveryDiff diff = Store.segmentReplicationDiff(latestPrimaryMetadata, latestReplicaMetadata);
             assertTrue(diff.different.isEmpty());
             assertTrue(diff.missing.isEmpty());
+        }
+    }
+
+    private void assertEqualTranslogOperations(ReplicationGroup shards, IndexShard primaryShard) throws IOException {
+        try (final Translog.Snapshot snapshot = getTranslog(primaryShard).newSnapshot()) {
+            List<Translog.Operation> operations = new ArrayList<>();
+            Translog.Operation op;
+            while ((op = snapshot.next()) != null) {
+                final Translog.Operation newOp = op;
+                operations.add(newOp);
+            }
+            for (IndexShard replica : shards.getReplicas()) {
+                try (final Translog.Snapshot replicaSnapshot = getTranslog(replica).newSnapshot()) {
+                    assertThat(replicaSnapshot, SnapshotMatchers.containsOperationsInAnyOrder(operations));
+                }
+            }
         }
     }
 }

@@ -33,13 +33,13 @@
 package org.opensearch.search.sort;
 
 import org.apache.lucene.index.LeafReaderContext;
-import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.common.util.BitArray;
 import org.opensearch.common.util.IntArray;
 import org.opensearch.common.util.MockBigArrays;
 import org.opensearch.common.util.MockPageCacheRecycler;
+import org.opensearch.common.lease.Releasable;
 import org.opensearch.indices.breaker.NoneCircuitBreakerService;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.test.OpenSearchTestCase;
@@ -74,6 +74,11 @@ public abstract class BucketedSortTestCase<T extends BucketedSort> extends OpenS
      * A random value for testing, with the appropriate precision for the type we're testing.
      */
     protected abstract double randomValue();
+
+    /** A property to indicated the underlying bucket's numeric data type is represented as unsigned numeric */
+    protected boolean isUnsignedNumeric() {
+        return false;
+    }
 
     protected final T build(SortOrder order, int bucketSize, BucketedSort.ExtraData extra, double[] values) {
         DocValueFormat format = randomFrom(DocValueFormat.RAW, DocValueFormat.BINARY, DocValueFormat.BOOLEAN);
@@ -194,7 +199,7 @@ public abstract class BucketedSortTestCase<T extends BucketedSort> extends OpenS
 
         double[] maxes = new double[buckets.length];
 
-        try (T sort = build(SortOrder.DESC, 1, new double[] { 2, 3, -1 })) {
+        try (T sort = build(SortOrder.DESC, 1, new double[] { 2, 3, isUnsignedNumeric() ? 0 : -1 })) {
             BucketedSort.Leaf leaf = sort.forLeaf(null);
             for (int b : buckets) {
                 maxes[b] = 2;
