@@ -37,13 +37,23 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
 import static java.util.Collections.unmodifiableSet;
+
+/**
+ * Allows to asynchronously fetch batch of shards related data from other nodes for allocation, without blocking
+ * the cluster update thread.
+ * <p>
+ * The async fetch logic maintains a map of which nodes are being fetched from in an async manner,
+ * and once the results are back, it makes sure to schedule a reroute to make sure those results will
+ * be taken into account.
+ *
+ * @opensearch.internal
+ */
 
 public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implements Releasable {
 
     /**
-     * An action that lists the relevant shard data that needs to be fetched.
+     * An action that lists the relevant shard data that needs to be fetched for batch of shards
      */
     public interface Lister<NodesResponse extends BaseNodesResponse<NodeResponse>, NodeResponse extends BaseNodeResponse> {
         void list(DiscoveryNode[] nodes,Map<ShardId, String> shardIdsWithCustomDataPath, ActionListener<NodesResponse> listener);
@@ -53,7 +63,7 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
     protected final String type;
     private final String batchUUID;
     protected Map<ShardId,String> shardsToCustomDataPathMap;
-    private Map<ShardId, Set<String>> ignoredShardToNodes = new HashMap<>();
+    private final Map<ShardId, Set<String>> ignoredShardToNodes = new HashMap<>();
     private final AsyncBatchShardFetch.Lister<BaseNodesResponse<T>, T> action;
     private final Map<String, AsyncBatchShardFetch.NodeEntry<T>> cache = new HashMap<>();
     private final Set<String> nodesToIgnore = new HashSet<>();
@@ -94,11 +104,9 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
     }
 
     /**
-     * Fetches the data for the relevant shard. If there any ongoing async fetches going on, or new ones have
+     * Fetches the data for the relevant batch of shards. If there any ongoing async fetches going on, or new ones have
      * been initiated by this call, the result will have no data.
      * <p>
-     * The ignoreNodes are nodes that are supposed to be ignored for this round, since fetching is async, we need
-     * to keep them around and make sure we add them back when all the responses are fetched and returned.
      */
     public synchronized AsyncBatchShardFetch.FetchResult<T> fetchData(DiscoveryNodes nodes, Map<ShardId, Set<String>> ignoreNodes) {
         if (closed) {
@@ -305,7 +313,7 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
     }
 
     /**
-     * Async fetches data for the provided shard with the set of nodes that need to be fetched from.
+     * Async fetches data for the provided  batch of shards with the set of nodes that need to be fetched from.
      */
     // visible for testing
     void asyncFetch(final DiscoveryNode[] nodes, long fetchingRound) {
@@ -370,40 +378,6 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
                 }
             }
 
-        }
-    }
-
-    /**
-     * The result of a fetch operation. Make sure to first check {@link #hasData()} before
-     * fetching the actual data.
-     */
-    public static class AdaptedResultsForShard<T extends BaseNodeResponse> {
-
-        private final ShardId shardId;
-        private final Map<DiscoveryNode, T> data;
-        private final Set<String> ignoreNodes;
-
-        public AdaptedResultsForShard(ShardId shardId, Map<DiscoveryNode, T> data, Set<String> ignoreNodes) {
-            this.shardId = shardId;
-            this.data = data;
-            this.ignoreNodes = ignoreNodes;
-        }
-
-        /**
-         * Does the result actually contain data? If not, then there are on going fetch
-         * operations happening, and it should wait for it.
-         */
-        public boolean hasData() {
-            return data != null;
-        }
-
-        /**
-         * Returns the actual data, note, make sure to check {@link #hasData()} first and
-         * only use this when there is an actual data.
-         */
-        public Map<DiscoveryNode, T> getData() {
-            assert data != null : "getData should only be called if there is data to be fetched, please check hasData first";
-            return this.data;
         }
     }
 
