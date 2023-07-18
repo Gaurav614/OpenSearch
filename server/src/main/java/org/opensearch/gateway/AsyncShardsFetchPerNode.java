@@ -25,7 +25,6 @@ import java.util.Map;
  * @opensearch.internal
  */
 public abstract class AsyncShardsFetchPerNode<T extends BaseNodeResponse> implements Releasable {
-
     /**
      * An action that lists the relevant shard data that needs to be fetched.
      */
