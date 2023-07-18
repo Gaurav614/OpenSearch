@@ -84,7 +84,7 @@ public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesA
     TransportNodesListGatewayStartedShardsBatch.NodeRequest,
     TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch>
     implements
-        AsyncShardsFetchPerNode.Lister<
+        AsyncBatchShardFetch.Lister<
             TransportNodesListGatewayStartedShardsBatch.NodesGatewayStartedShardsBatch,
             TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> {
 

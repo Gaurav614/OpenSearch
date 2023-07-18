@@ -29,6 +29,7 @@ import org.opensearch.common.io.stream.Writeable;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.env.NodeEnvironment;
+import org.opensearch.gateway.AsyncBatchShardFetch;
 import org.opensearch.gateway.AsyncShardsFetchPerNode;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
@@ -64,7 +65,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
     TransportNodesListShardStoreMetadataBatch.NodeRequest,
     TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch>
     implements
-        AsyncShardsFetchPerNode.Lister<
+        AsyncBatchShardFetch.Lister<
             TransportNodesListShardStoreMetadataBatch.NodesStoreFilesMetadataBatch,
             TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> {
 

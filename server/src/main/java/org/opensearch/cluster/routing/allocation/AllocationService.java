@@ -554,7 +554,7 @@ public class AllocationService {
             // if not fallback to single assignment
             ExistingShardsAllocator allocator = verifySameAllocatorForAllShards(allocation);
             if (allocator != null) {
-                allocator.allocateBatchUnassigned(allocation, true);
+                allocator.allocateUnassignedBatch(allocation, true);
 
             }
         }
