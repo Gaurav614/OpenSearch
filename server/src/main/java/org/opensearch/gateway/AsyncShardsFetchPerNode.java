@@ -21,11 +21,12 @@ import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.util.concurrent.OpenSearchRejectedExecutionException;
 import org.opensearch.index.shard.ShardId;
 import org.opensearch.transport.ReceiveTimeoutTransportException;
+import org.opensearch.common.util.concurrent.OpenSearchRejectedExecutionException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -201,6 +202,7 @@ public abstract class AsyncShardsFetchPerNode<T extends BaseNodeResponse> implem
         action.list(nodes, shardsToCustomDataPathMap, new ActionListener<BaseNodesResponse<T>>() {
             @Override
             public void onResponse(BaseNodesResponse<T> tBaseNodesResponse) {
+                logger.info("Got the response ");
                 processTestAsyncFetch(tBaseNodesResponse.getNodes(),tBaseNodesResponse.failures(), fetchingRound);
             }
 
@@ -211,6 +213,7 @@ public abstract class AsyncShardsFetchPerNode<T extends BaseNodeResponse> implem
                 for (final DiscoveryNode node : nodes) {
                     failures.add(new FailedNodeException(node.getId(), "Total failure in fetching", e));
                 }
+                logger.error("sdarb5 we got filures for {}", Arrays.toString(nodes));
                 processTestAsyncFetch(null, failures, fetchingRound);
             }
         });

@@ -149,6 +149,17 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         Map<ShardId, NodeStoreFilesMetadata> shardStoreMetadataMap = new HashMap<ShardId, NodeStoreFilesMetadata>();
         for (Map.Entry<ShardId, String> shardToCustomDataPathEntry : request.getShardIdsWithCustomDataPath().entrySet()) {
             final ShardId shardId = shardToCustomDataPathEntry.getKey();
+            if(clusterService.localNode().getName() == "data1") {
+                shardStoreMetadataMap.put(
+                    shardId,
+                    new NodeStoreFilesMetadata(
+                        new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList()),
+                        new OpenSearchException("sdarb Induced error for testing " + shardId.getIndex())
+                    )
+                );
+                logger.info("sdarb Inducing error on node data1");
+                continue;
+            }
             logger.info("listing store meta data for {} on node {}", shardId, clusterService.localNode().getName());
             long startTimeNS = System.nanoTime();
             boolean exists = false;
@@ -440,6 +451,10 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         public NodeStoreFilesMetadata(StreamInput in) throws IOException {
             System.out.println("sdarb new Wasn't expecting to reach here");
             storeFilesMetadata = new StoreFilesMetadata(in);
+            if(in.readBoolean()) {
+                this.storeFileFetchException = in.readException();
+            } else
+                this.storeFileFetchException = null;
         }
 
         public NodeStoreFilesMetadata(StoreFilesMetadata storeFilesMetadata, Exception storeFileFetchException) {
@@ -457,6 +472,12 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
 
         public void writeTo(StreamOutput out) throws IOException {
             storeFilesMetadata.writeTo(out);
+            if (storeFileFetchException != null) {
+                out.writeBoolean(true);
+                out.writeException(storeFileFetchException);
+            } else {
+                out.writeBoolean(false);
+            }
         }
 
         public Exception getStoreFileFetchException() {
