@@ -32,9 +32,33 @@
 package org.opensearch.index.store;
 
 import org.apache.lucene.codecs.CodecUtil;
-import org.apache.lucene.document.*;
-import org.apache.lucene.index.*;
-import org.apache.lucene.store.*;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.SortedDocValuesField;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;
+import org.apache.lucene.index.CorruptIndexException;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexFileNames;
+import org.apache.lucene.index.IndexFormatTooNewException;
+import org.apache.lucene.index.IndexFormatTooOldException;
+import org.apache.lucene.index.IndexNotFoundException;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.KeepOnlyLastCommitDeletionPolicy;
+import org.apache.lucene.index.NoDeletionPolicy;
+import org.apache.lucene.index.NoMergePolicy;
+import org.apache.lucene.index.SegmentInfos;
+import org.apache.lucene.index.SnapshotDeletionPolicy;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.store.ByteBuffersDirectory;
+import org.apache.lucene.store.ChecksumIndexInput;
+import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.FilterDirectory;
+import org.apache.lucene.store.IOContext;
+import org.apache.lucene.store.IndexInput;
+import org.apache.lucene.store.IndexOutput;
+import org.apache.lucene.store.NIOFSDirectory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.tests.store.BaseDirectoryWrapper;
 import org.apache.lucene.tests.util.TestUtil;
@@ -58,7 +82,7 @@ import org.opensearch.index.seqno.ReplicationTracker;
 import org.opensearch.index.seqno.RetentionLease;
 import org.opensearch.index.shard.ShardId;
 import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper;
+import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
 import org.opensearch.test.DummyShardLock;
 import org.opensearch.test.IndexSettingsModule;
 import org.opensearch.test.OpenSearchTestCase;
@@ -69,7 +93,15 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.Collections.unmodifiableMap;
@@ -909,8 +941,8 @@ public class StoreTests extends OpenSearchTestCase {
                 )
             );
         }
-        TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata outStoreFileMetadata =
-            new TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata(
+        TransportNodesListShardStoreMetadata.StoreFilesMetadata outStoreFileMetadata =
+            new TransportNodesListShardStoreMetadata.StoreFilesMetadata(
                 new ShardId("test", "_na_", 0),
                 metadataSnapshot,
                 peerRecoveryRetentionLeases
@@ -923,8 +955,8 @@ public class StoreTests extends OpenSearchTestCase {
         ByteArrayInputStream inBuffer = new ByteArrayInputStream(outBuffer.toByteArray());
         InputStreamStreamInput in = new InputStreamStreamInput(inBuffer);
         in.setVersion(targetNodeVersion);
-        TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata inStoreFileMetadata =
-            new TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata(in);
+        TransportNodesListShardStoreMetadata.StoreFilesMetadata inStoreFileMetadata =
+            new TransportNodesListShardStoreMetadata.StoreFilesMetadata(in);
         Iterator<StoreFileMetadata> outFiles = outStoreFileMetadata.iterator();
         for (StoreFileMetadata inFile : inStoreFileMetadata) {
             assertThat(inFile.name(), equalTo(outFiles.next().name()));

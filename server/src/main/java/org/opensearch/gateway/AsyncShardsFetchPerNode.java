@@ -21,9 +21,9 @@ import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lease.Releasable;
+import org.opensearch.common.util.concurrent.OpenSearchRejectedExecutionException;
 import org.opensearch.index.shard.ShardId;
 import org.opensearch.transport.ReceiveTimeoutTransportException;
-import org.opensearch.common.util.concurrent.OpenSearchRejectedExecutionException;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -231,7 +231,7 @@ public abstract class AsyncShardsFetchPerNode<T extends BaseNodeResponse> implem
             return;
         }
 
-        logger.trace("TEST-processing fetched results");
+        logger.info("sdarb6 TEST-processing fetched results {}", failures);
 
         if (responses != null) {
             for (T response : responses) {

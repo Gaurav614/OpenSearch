@@ -55,11 +55,14 @@ import org.opensearch.common.lease.Releasables;
 import org.opensearch.common.util.concurrent.ConcurrentCollections;
 import org.opensearch.common.util.set.Sets;
 import org.opensearch.index.shard.ShardId;
-import org.opensearch.indices.store.TransportNodesBatchListShardStoreMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
-import org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper;
+import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -90,17 +93,17 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
 
     private Map<DiscoveryNode, TransportNodesBulkListGatewayStartedShards.BulkOfNodeGatewayStartedShards> shardsPerNode= ConcurrentCollections.newConcurrentMap();
-    private Map<DiscoveryNode, TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch> shardStoresPerNode= ConcurrentCollections.newConcurrentMap();
+    private Map<DiscoveryNode, TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> shardStoresPerNode= ConcurrentCollections.newConcurrentMap();
 
 
     private AsyncShardsFetchPerNode<TransportNodesBulkListGatewayStartedShards.BulkOfNodeGatewayStartedShards> fetchShardsFromNodes=null;
-    private AsyncShardsFetchPerNode<TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch> fetchShardStoreFromNodes=null;
+    private AsyncShardsFetchPerNode<TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> fetchShardStoreFromNodes=null;
 
 
 
     private Set<String> lastSeenEphemeralIds = Collections.emptySet();
     TransportNodesBulkListGatewayStartedShards testAction;
-    TransportNodesBatchListShardStoreMetadata testStoreAction;
+    TransportNodesListShardStoreMetadataBatch testStoreAction;
 
     @Inject
     public GatewayAllocator(
@@ -108,7 +111,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         TransportNodesListGatewayStartedShards startedAction,
         TransportNodesListShardStoreMetadata storeAction,
         TransportNodesBulkListGatewayStartedShards testAction,
-        TransportNodesBatchListShardStoreMetadata testStoreAction
+        TransportNodesListShardStoreMetadataBatch testStoreAction
     ) {
         this.rerouteService = rerouteService;
         this.primaryShardAllocator = new TestInternalPrimaryShardAllocator(testAction);
@@ -159,7 +162,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         // clean async object and cache for per DiscoverNode if all shards are assigned and none are ignore list
         if (allocation.routingNodes().unassigned().isEmpty() && allocation.routingNodes().unassigned().isIgnoredEmpty()){
             Releasables.close(fetchShardsFromNodes);
-            Releasables.close(fetchShardsFromNodes);
+            Releasables.close(fetchShardStoreFromNodes);
             shardsPerNode.clear();
             shardStoresPerNode.clear();
             fetchShardsFromNodes =null;
@@ -177,6 +180,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         // clean async object and cache for per DiscoverNode if all shards are assigned and none are ignore list
         if (allocation.routingNodes().unassigned().isEmpty() && allocation.routingNodes().unassigned().isIgnoredEmpty()){
             Releasables.close(fetchShardsFromNodes);
+            Releasables.close(fetchShardStoreFromNodes);
             shardsPerNode.clear();
             shardStoresPerNode.clear();
         }
@@ -251,7 +255,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         }
     }
 
-    private synchronized Map<DiscoveryNode, TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch> collectShardsStorePerNode(RoutingAllocation allocation) {
+    private synchronized Map<DiscoveryNode, TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> collectShardsStorePerNode(RoutingAllocation allocation) {
         logger.info("sdarbStore Collecting of total shards ={}, over transport");
         Map<ShardId, String> batchOfUnassignedShardsWithCustomDataPath = getBatchOfUnassignedShardsWithCustomDataPath(allocation, false);
         if (fetchShardStoreFromNodes == null) {
@@ -272,11 +276,11 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             }
         }
 
-        AsyncShardsFetchPerNode.TestFetchResult<TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch> shardStoreTestFetchResult = fetchShardStoreFromNodes.testFetchData(allocation.nodes());
+        AsyncShardsFetchPerNode.TestFetchResult<TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> shardStoreTestFetchResult = fetchShardStoreFromNodes.testFetchData(allocation.nodes());
 
         if (shardStoreTestFetchResult.getNodesToShards()==null)
         {
-            logger.info("sdarbStore Fetching probably still going on some nodes for number of shards={}, current fetch = {}",fetchShardsFromNodes.shardsToCustomDataPathMap.size(),fetchShardsFromNodes.cache.size());
+            logger.info("sdarbStore Fetching probably still going on some nodes for number of shards={}, current fetch = {}",fetchShardStoreFromNodes.shardsToCustomDataPathMap.size(),fetchShardStoreFromNodes.cache.size());
             return null;
         }
         else {
@@ -500,27 +504,31 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     class TestInternalReplicaShardAllocator extends ReplicaShardAllocator {
 
 
-        private final TransportNodesBatchListShardStoreMetadata storeAction;
+        private final TransportNodesListShardStoreMetadataBatch storeAction;
 
-        TestInternalReplicaShardAllocator(TransportNodesBatchListShardStoreMetadata storeAction) {
+        TestInternalReplicaShardAllocator(TransportNodesListShardStoreMetadataBatch storeAction) {
             this.storeAction = storeAction;
         }
         @Override
         protected AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata> fetchData(ShardRouting shard, RoutingAllocation allocation) {
             ShardId shardId = shard.shardId();
-            Map<DiscoveryNode, TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch> discoveryNodeListOfNodeGatewayStartedShardsMap = shardStoresPerNode;
+            Map<DiscoveryNode, TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> discoveryNodeListOfNodeGatewayStartedShardsMap = shardStoresPerNode;
 
             if (shardsPerNode.isEmpty()) {
                 return new AsyncShardFetch.FetchResult<>(shardId, null, Collections.emptySet());
             }
             HashMap<DiscoveryNode, TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata> dataToAdapt = new HashMap<>();
             for (DiscoveryNode node : discoveryNodeListOfNodeGatewayStartedShardsMap.keySet()) {
-
-                TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch shardsStoreOnThatNode = discoveryNodeListOfNodeGatewayStartedShardsMap.get(node);
+                TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch shardsStoreOnThatNode = discoveryNodeListOfNodeGatewayStartedShardsMap.get(node);
                 if (shardsStoreOnThatNode.getNodeStoreFilesMetadataBatch().containsKey(shardId)) {
-                    TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadata nodeGatewayStartedShardsFromAdapt = shardsStoreOnThatNode.getNodeStoreFilesMetadataBatch().get(shardId);
+                    TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata nodeGatewayStartedShardsFromAdapt = shardsStoreOnThatNode.getNodeStoreFilesMetadataBatch().get(shardId);
+                    logger.error("Sdarb exceptio nis {}", nodeGatewayStartedShardsFromAdapt.getStoreFileFetchException());
+                    if(nodeGatewayStartedShardsFromAdapt.getStoreFileFetchException() != null) {
+                        logger.error("sdarb There was an error while fetching replica store data for shard {} on node {} so skipping this store data", shard, node);
+                        continue;
+                    }
                     // construct a object to adapt
-                    TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata nodeGatewayStartedShardsToAdapt = new TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata(node, new TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata(
+                    TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata nodeGatewayStartedShardsToAdapt = new TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata(node, new TransportNodesListShardStoreMetadata.StoreFilesMetadata(
                         nodeGatewayStartedShardsFromAdapt.storeFilesMetadata().shardId(),
                         nodeGatewayStartedShardsFromAdapt.storeFilesMetadata().getMetadataSnapshot(),
                         nodeGatewayStartedShardsFromAdapt.storeFilesMetadata().peerRecoveryRetentionLeases()
@@ -575,7 +583,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         @Override
         protected boolean hasInitiatedFetching(ShardRouting shard) {
             boolean fetchingDone = false;
-            for(Map.Entry<String, AsyncShardsFetchPerNode.NodeEntry<TransportNodesBatchListShardStoreMetadata.NodeStoreFilesMetadataBatch>> asyncFetchStore : fetchShardStoreFromNodes.cache.entrySet()) {
+            for(Map.Entry<String, AsyncShardsFetchPerNode.NodeEntry<TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch>> asyncFetchStore : fetchShardStoreFromNodes.cache.entrySet()) {
                 fetchingDone = fetchingDone | asyncFetchStore.getValue().isFetching();
             }
             logger.info("sdarbStore fetchingDone {}", fetchingDone);

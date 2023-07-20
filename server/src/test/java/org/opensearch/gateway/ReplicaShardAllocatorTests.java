@@ -42,7 +42,16 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.*;
+import org.opensearch.cluster.routing.IndexRoutingTable;
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+import org.opensearch.cluster.routing.RecoverySource;
+import org.opensearch.cluster.routing.RoutingNode;
+import org.opensearch.cluster.routing.RoutingNodes;
+import org.opensearch.cluster.routing.RoutingTable;
+import org.opensearch.cluster.routing.ShardRouting;
+import org.opensearch.cluster.routing.ShardRoutingState;
+import org.opensearch.cluster.routing.TestShardRouting;
+import org.opensearch.cluster.routing.UnassignedInfo;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.cluster.routing.allocation.decider.AllocationDecider;
 import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;
@@ -59,10 +68,17 @@ import org.opensearch.index.shard.ShardId;
 import org.opensearch.index.store.Store;
 import org.opensearch.index.store.StoreFileMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
-import org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper;
 import org.opensearch.snapshots.SnapshotShardSizeInfo;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static java.util.Collections.unmodifiableMap;
@@ -646,7 +662,7 @@ public class ReplicaShardAllocatorTests extends OpenSearchAllocationTestCase {
 
     class TestAllocator extends ReplicaShardAllocator {
 
-        private Map<DiscoveryNode, TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata> data = null;
+        private Map<DiscoveryNode, TransportNodesListShardStoreMetadata.StoreFilesMetadata> data = null;
         private AtomicBoolean fetchDataCalled = new AtomicBoolean(false);
 
         public void clean() {
@@ -684,7 +700,7 @@ public class ReplicaShardAllocatorTests extends OpenSearchAllocationTestCase {
             }
             data.put(
                 node,
-                new TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata(
+                new TransportNodesListShardStoreMetadata.StoreFilesMetadata(
                     shardId,
                     new Store.MetadataSnapshot(unmodifiableMap(filesAsMap), unmodifiableMap(commitData), randomInt()),
                     peerRecoveryRetentionLeases
@@ -702,7 +718,7 @@ public class ReplicaShardAllocatorTests extends OpenSearchAllocationTestCase {
             Map<DiscoveryNode, TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata> tData = null;
             if (data != null) {
                 tData = new HashMap<>();
-                for (Map.Entry<DiscoveryNode, TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata> entry : data.entrySet()) {
+                for (Map.Entry<DiscoveryNode, TransportNodesListShardStoreMetadata.StoreFilesMetadata> entry : data.entrySet()) {
                     tData.put(
                         entry.getKey(),
                         new TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata(entry.getKey(), entry.getValue())
