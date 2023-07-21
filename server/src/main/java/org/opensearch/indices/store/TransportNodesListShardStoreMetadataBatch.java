@@ -64,7 +64,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
     TransportNodesListShardStoreMetadataBatch.NodeRequest,
     TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch>
     implements
-    AsyncBatchShardFetch.Lister<
+        AsyncBatchShardFetch.Lister<
             TransportNodesListShardStoreMetadataBatch.NodesStoreFilesMetadataBatch,
             TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> {
 
@@ -435,7 +435,11 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
 
         public NodeStoreFilesMetadata(StreamInput in) throws IOException {
             storeFilesMetadata = new StoreFilesMetadata(in);
-            this.storeFileFetchException = null;
+            if (in.readBoolean()) {
+                this.storeFileFetchException = in.readException();
+            } else {
+                this.storeFileFetchException = null;
+            }
         }
 
         public NodeStoreFilesMetadata(StoreFilesMetadata storeFilesMetadata, Exception storeFileFetchException) {
@@ -453,6 +457,12 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
 
         public void writeTo(StreamOutput out) throws IOException {
             storeFilesMetadata.writeTo(out);
+            if (storeFileFetchException != null) {
+                out.writeBoolean(true);
+                out.writeException(storeFileFetchException);
+            } else {
+                out.writeBoolean(false);
+            }
         }
 
         public Exception getStoreFileFetchException() {
