@@ -342,7 +342,7 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
     public static class FetchResult<T extends BaseNodeResponse> {
 
         private final Map<DiscoveryNode, T> data;
-        private Map<ShardId, Set<String>> ignoredShardToNodes = new HashMap<>();
+        private final Map<ShardId, Set<String>> ignoredShardToNodes;
 
         public FetchResult(Map<DiscoveryNode, T> data, Map<ShardId, Set<String>> ignoreNodes) {
             this.data = data;

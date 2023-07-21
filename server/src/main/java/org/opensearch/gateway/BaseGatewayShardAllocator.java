@@ -46,6 +46,7 @@ import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.cluster.routing.allocation.decider.Decision;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
@@ -80,9 +81,10 @@ public abstract class BaseGatewayShardAllocator {
         executeDecision(shardRouting, allocateUnassignedDecision, allocation, unassignedAllocationHandler);
     }
 
-    public void allocateUnassignedBatch(Set<ShardRouting> shards, RoutingAllocation allocation) {
+    public void allocateUnassignedBatch(String batchId, Set<ShardRouting> shards, RoutingAllocation allocation) {
         // make Allocation Decisions for all shards
-        ConcurrentMap<ShardRouting, AllocateUnassignedDecision> decisionMap = makeAllocationDecision(shards, allocation, logger);
+        HashMap<ShardRouting, AllocateUnassignedDecision> decisionMap = makeAllocationDecision(batchId, shards,
+            allocation, logger);
         // get all unassigned shards
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = allocation.routingNodes().unassigned().iterator();
         while (iterator.hasNext()){
@@ -143,11 +145,18 @@ public abstract class BaseGatewayShardAllocator {
         Logger logger
     );
 
-    public abstract ConcurrentMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(
+    public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(
+            String batchId,
             Set<ShardRouting> shards,
             RoutingAllocation allocation,
             Logger logger
-    );
+    ){
+        HashMap<ShardRouting, AllocateUnassignedDecision> allocationDecisions = new HashMap<>();
+        for (ShardRouting unassignedShard: shards){
+            allocationDecisions.put(unassignedShard, makeAllocationDecision(unassignedShard, allocation, logger));
+        }
+        return allocationDecisions;
+    }
 
     /**
      * Builds decisions for all nodes in the cluster, so that the explain API can provide information on
