@@ -96,7 +96,7 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
             || shard.recoverySource().getType() == RecoverySource.Type.SNAPSHOT);
     }
 
-    abstract protected FetchResult<NodeGatewayStartedShardsBatch> fetchData(String batchId,
+    abstract protected FetchResult<NodeGatewayStartedShardsBatch> fetchData(Set<ShardRouting> shardsEligibleForFetch,
                                                                             Set<ShardRouting> inEligibleShards,
                                                                             RoutingAllocation allocation);
 
@@ -117,9 +117,9 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
      * @return shard to allocation decision map
      */
     @Override
-    public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(String batchId,
-                                                                                    Set<ShardRouting> shards,
-                                                                                    RoutingAllocation allocation, Logger logger) {
+    public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(Set<ShardRouting> shards,
+                                                                                    RoutingAllocation allocation,
+                                                                                    Logger logger) {
         HashMap<ShardRouting, AllocateUnassignedDecision> shardAllocationDecisions = new HashMap<>();
         final boolean explain = allocation.debugDecision();
         Set<ShardRouting> shardsEligibleForFetch = new HashSet<>();
@@ -135,7 +135,7 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
             }
         }
         // only fetch data for eligible shards
-        final FetchResult<NodeGatewayStartedShardsBatch> shardsState = fetchData(batchId, shardsNotEligibleForFetch, allocation);
+        final FetchResult<NodeGatewayStartedShardsBatch> shardsState = fetchData(shardsEligibleForFetch, shardsNotEligibleForFetch, allocation);
         // Note : shardsState contain the Data, there key is DiscoveryNode but value is Map<ShardId,
         // NodeGatewayStartedShardsBatch> so to get one shard level data (from all the nodes), we'll traverse the map
         // and construct the nodeShardState along the way before making any allocation decision. As metadata for a

@@ -81,7 +81,7 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
         this.logger = logger;
         this.type = type;
         this.shardsToCustomDataPathMap = shardsToCustomDataPathMap;
-        this.action = (AsyncBatchShardFetch.Lister<BaseNodesResponse<T>, T>) action;
+        this.action = (Lister<BaseNodesResponse<T>, T>) action;
         this.batchUUID = batchUUID;
     }
 

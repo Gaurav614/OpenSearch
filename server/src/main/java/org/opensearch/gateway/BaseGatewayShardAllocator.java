@@ -81,9 +81,9 @@ public abstract class BaseGatewayShardAllocator {
         executeDecision(shardRouting, allocateUnassignedDecision, allocation, unassignedAllocationHandler);
     }
 
-    public void allocateUnassignedBatch(String batchId, Set<ShardRouting> shards, RoutingAllocation allocation) {
+    public void allocateUnassignedBatch(Set<ShardRouting> shards, RoutingAllocation allocation) {
         // make Allocation Decisions for all shards
-        HashMap<ShardRouting, AllocateUnassignedDecision> decisionMap = makeAllocationDecision(batchId, shards,
+        HashMap<ShardRouting, AllocateUnassignedDecision> decisionMap = makeAllocationDecision(shards,
             allocation, logger);
         // get all unassigned shards
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = allocation.routingNodes().unassigned().iterator();
@@ -146,7 +146,6 @@ public abstract class BaseGatewayShardAllocator {
     );
 
     public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(
-            String batchId,
             Set<ShardRouting> shards,
             RoutingAllocation allocation,
             Logger logger
