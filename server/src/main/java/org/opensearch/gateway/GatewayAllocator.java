@@ -57,6 +57,7 @@ import org.opensearch.common.lease.Releasables;
 import org.opensearch.index.shard.ShardId;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
+import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -88,7 +89,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     private final ReplicaShardAllocator replicaShardAllocator;
 
     private final PrimaryShardBatchAllocator primaryBatchShardAllocator;
-    private final ReplicaShardAllocator replicaBatchShardAllocator;
+    private final ReplicaShardBatchAllocator replicaBatchShardAllocator;
     private final TransportNodesListGatewayStartedShardsBatch batchStartedAction;
     private final TransportNodesListShardStoreMetadataBatch batchStoreAction;
 
@@ -525,12 +526,32 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         }
     }
 
-    class InternalReplicaBatchShardAllocator extends ReplicaShardAllocator {
+    class InternalReplicaBatchShardAllocator extends ReplicaShardBatchAllocator {
 
         private final TransportNodesListShardStoreMetadataBatch storeAction;
 
         InternalReplicaBatchShardAllocator(TransportNodesListShardStoreMetadataBatch storeAction) {
             this.storeAction = storeAction;
+        }
+
+        @Override
+        protected AsyncBatchShardFetch.FetchResult<NodeStoreFilesMetadataBatch> fetchData(String batchId,
+                                                                                          Set<ShardRouting> inEligibleShards,
+                                                                                          RoutingAllocation allocation) {
+            ShardsBatch shardsBatchKey = new ShardsBatch(batchId);
+            AsyncBatchShardFetch<TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> fetch =
+                asyncBatchFetchStore.get(shardsBatchKey);
+            Map<ShardId, Set<String>> shardToIgnoreNodes = new HashMap<>();
+            // remove in-eligible shards which allocator is not responsible for
+            fetch.shardsToCustomDataPathMap.keySet().removeAll(inEligibleShards.stream().map(ShardRouting::shardId).collect(Collectors.toSet()));
+            for (ShardId shardId : asyncBatchFetchStore.get(shardsBatchKey).shardsToCustomDataPathMap.keySet()) {
+                shardToIgnoreNodes.put(shardId, allocation.getIgnoreNodes(shardId));
+            }
+            AsyncBatchShardFetch.FetchResult<NodeStoreFilesMetadataBatch> shardBatchState = fetch.fetchData(allocation.nodes(), shardToIgnoreNodes);
+            if (shardBatchState.hasData()) {
+                shardBatchState.processAllocation(allocation);
+            }
+            return shardBatchState;
         }
 
         @Override
