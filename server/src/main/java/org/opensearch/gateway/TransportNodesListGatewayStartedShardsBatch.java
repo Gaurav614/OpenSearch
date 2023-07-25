@@ -159,7 +159,7 @@ public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesA
      * This function is similar to nodeoperation method of {@link TransportNodesListGatewayStartedShards} we loop over
      * the shards here to fetch the shard result in bulk.
      *
-     * @param request
+     * @param request Request
      * @return NodeGatewayStartedShardsBatch
      */
     @Override

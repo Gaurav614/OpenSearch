@@ -559,14 +559,14 @@ public class AllocationService {
             }
         }
 
-
-        final RoutingNodes.UnassignedShards.UnassignedIterator primaryIterator = allocation.routingNodes().unassigned().iterator();
-        while (primaryIterator.hasNext()) {
-            final ShardRouting shardRouting = primaryIterator.next();
-            if (shardRouting.primary()) {
-                getAllocatorForShard(shardRouting, allocation).allocateUnassigned(shardRouting, allocation, primaryIterator);
-            }
-        }
+//
+//        final RoutingNodes.UnassignedShards.UnassignedIterator primaryIterator = allocation.routingNodes().unassigned().iterator();
+//        while (primaryIterator.hasNext()) {
+//            final ShardRouting shardRouting = primaryIterator.next();
+//            if (shardRouting.primary()) {
+//                getAllocatorForShard(shardRouting, allocation).allocateUnassigned(shardRouting, allocation, primaryIterator);
+//            }
+//        }
 
         for (final ExistingShardsAllocator existingShardsAllocator : existingShardsAllocators.values()) {
             existingShardsAllocator.afterPrimariesBeforeReplicas(allocation);

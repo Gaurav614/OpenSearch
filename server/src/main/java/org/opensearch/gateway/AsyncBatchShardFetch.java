@@ -106,7 +106,6 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
     /**
      * Fetches the data for the relevant batch of shards. If there any ongoing async fetches going on, or new ones have
      * been initiated by this call, the result will have no data.
-     * <p>
      */
     public synchronized AsyncBatchShardFetch.FetchResult<T> fetchData(DiscoveryNodes nodes, Map<ShardId, Set<String>> ignoreNodes) {
         if (closed) {

@@ -110,7 +110,6 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
 
     /**
      * Build allocation decisions for all the shards present in the batch identified by batchId.
-     * @param batchId unique id for this set of shards maintained by GatewayAllocator
      * @param shards set of shards given for allocation
      * @param allocation current allocation of all the shards
      * @param logger logger used for logging
