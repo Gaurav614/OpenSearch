@@ -61,7 +61,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
             && shard.unassignedInfo().getReason() != UnassignedInfo.Reason.INDEX_CREATED;
     }
 
-    abstract protected FetchResult<NodeStoreFilesMetadataBatch> fetchData(String batchId,
+    abstract protected FetchResult<NodeStoreFilesMetadataBatch> fetchData(Set<ShardRouting> shardEligibleForFetch,
                                                                           Set<ShardRouting> inEligibleShards,
                                                                           RoutingAllocation allocation);
 
@@ -71,7 +71,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
     }
 
     @Override
-    public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(String batchId, Set<ShardRouting> shards, RoutingAllocation allocation, Logger logger) {
+    public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(Set<ShardRouting> shards, RoutingAllocation allocation, Logger logger) {
         HashMap<ShardRouting, AllocateUnassignedDecision> shardAllocationDecisions = new HashMap<>();
         final boolean explain = allocation.debugDecision();
         final RoutingNodes routingNodes = allocation.routingNodes();
@@ -108,7 +108,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
         }
 
         // only fetch data for eligible shards
-        final FetchResult<NodeStoreFilesMetadataBatch> shardsState = fetchData(batchId, shardsNotEligibleForFetch, allocation);
+        final FetchResult<NodeStoreFilesMetadataBatch> shardsState = fetchData(shardsEligibleForFetch, shardsNotEligibleForFetch, allocation);
 
         // ToDo: Analyze if we need to create hashmaps here or sequential is better
 //        Map<ShardRouting, DiscoveryNode> primaryNodesMap = shardsEligibleForFetch.stream()
@@ -399,6 +399,4 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
         }
         return nodeFilesStore.getNodeStoreFilesMetadataBatch().get(shard.shardId()).storeFilesMetadata();
     }
-    )
-
 }
