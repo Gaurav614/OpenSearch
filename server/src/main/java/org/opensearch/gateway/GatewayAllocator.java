@@ -184,10 +184,20 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
     @Override
     public void afterPrimariesBeforeReplicas(RoutingAllocation allocation) {
-        assert replicaShardAllocator != null;
-        if (allocation.routingNodes().hasInactiveShards()) {
-            // cancel existing recoveries if we have a better match
-            replicaShardAllocator.processExistingRecoveries(allocation);
+        // ToDo: fetch from settings
+        boolean batchMode = true;
+        if (batchMode) {
+            assert replicaBatchShardAllocator != null;
+            List<Set<ShardRouting>> storedShardBatches = batchIdToStoreShardBatch.values().stream()
+                    .map(ShardsBatch::getBatchedShardRoutings)
+                    .collect(Collectors.toList());
+            replicaBatchShardAllocator.processExistingRecoveries(allocation, storedShardBatches);
+        } else {
+            assert replicaShardAllocator != null;
+            if (allocation.routingNodes().hasInactiveShards()) {
+                // cancel existing recoveries if we have a better match
+                replicaShardAllocator.processExistingRecoveries(allocation);
+            }
         }
     }
 
