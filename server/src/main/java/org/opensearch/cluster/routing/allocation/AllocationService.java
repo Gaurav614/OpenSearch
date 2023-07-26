@@ -555,18 +555,22 @@ public class AllocationService {
             ExistingShardsAllocator allocator = verifySameAllocatorForAllShards(allocation);
             if (allocator != null) {
                 allocator.allocateUnassignedBatch(allocation, true);
-
+                for (final ExistingShardsAllocator existingShardsAllocator : existingShardsAllocators.values()) {
+                    existingShardsAllocator.afterPrimariesBeforeReplicas(allocation);
+                }
+                allocator.allocateUnassignedBatch(allocation, false);
+                return;
             }
         }
 
-//
-//        final RoutingNodes.UnassignedShards.UnassignedIterator primaryIterator = allocation.routingNodes().unassigned().iterator();
-//        while (primaryIterator.hasNext()) {
-//            final ShardRouting shardRouting = primaryIterator.next();
-//            if (shardRouting.primary()) {
-//                getAllocatorForShard(shardRouting, allocation).allocateUnassigned(shardRouting, allocation, primaryIterator);
-//            }
-//        }
+
+        final RoutingNodes.UnassignedShards.UnassignedIterator primaryIterator = allocation.routingNodes().unassigned().iterator();
+        while (primaryIterator.hasNext()) {
+            final ShardRouting shardRouting = primaryIterator.next();
+            if (shardRouting.primary()) {
+                getAllocatorForShard(shardRouting, allocation).allocateUnassigned(shardRouting, allocation, primaryIterator);
+            }
+        }
 
         for (final ExistingShardsAllocator existingShardsAllocator : existingShardsAllocators.values()) {
             existingShardsAllocator.afterPrimariesBeforeReplicas(allocation);
@@ -582,6 +586,10 @@ public class AllocationService {
     }
 
     private ExistingShardsAllocator verifySameAllocatorForAllShards(RoutingAllocation allocation) {
+        // if there is a single Allocator set in Allocation Service then use it for all shards
+        if (existingShardsAllocators.size() == 1) {
+            return existingShardsAllocators.values().iterator().next();
+        }
         RoutingNodes.UnassignedShards unassignedShards = allocation.routingNodes().unassigned();
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = unassignedShards.iterator();
         ExistingShardsAllocator currentAllocatorForShard =null;
