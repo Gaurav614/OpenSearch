@@ -288,7 +288,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
      * Cleans the batch if it is empty after removing the shard.
      * This method should be called when removing the shard from the batch instead {@link ShardsBatch#removeFromBatch(ShardRouting)}
      * so that we can clean up the batch if it is empty and release the fetching resources
-     * @param shardRouting
+     * @param shardRouting shard to be removed
      */
     private void safelyRemoveShardFromBatch(ShardRouting shardRouting) {
         String batchId = shardRouting.primary() ? startedShardBatchLookup.get(shardRouting.shardId()) : storeShardBatchLookup.get(shardRouting.shardId());
@@ -570,7 +570,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             ShardRouting shardRouting = shardsEligibleForFetch.iterator().hasNext() ? shardsEligibleForFetch.iterator().next() : null;
             shardRouting = shardRouting == null && inEligibleShards.iterator().hasNext() ? inEligibleShards.iterator().next() : shardRouting;
             if (shardRouting == null) {
-                return new AsyncBatchShardFetch<>.FetchResult<>(null, Collections.emptyMap());
+                return new AsyncBatchShardFetch.FetchResult<>(null, Collections.emptyMap());
             }
 
             String batchId = storeShardBatchLookup.getOrDefault(shardRouting.shardId(), null);
@@ -590,7 +590,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
             if (shardsBatch.getBatchedShards().isEmpty() && shardsEligibleForFetch.isEmpty()) {
                 logger.debug("Batch {} is empty", batchId);
-                return new AsyncBatchShardFetch<>.FetchResult<>(null, Collections.emptyMap());
+                return new AsyncBatchShardFetch.FetchResult<>(null, Collections.emptyMap());
             }
             Map<ShardId, Set<String>> shardToIgnoreNodes = new HashMap<>();
             for (ShardId shardId : shardsBatch.asyncBatch.shardsToCustomDataPathMap.keySet()) {
