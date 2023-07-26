@@ -179,6 +179,8 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     public void beforeAllocation(final RoutingAllocation allocation) {
         assert primaryShardAllocator != null;
         assert replicaShardAllocator != null;
+        assert primaryBatchShardAllocator != null;
+        assert replicaBatchShardAllocator != null;
         ensureAsyncFetchStorePrimaryRecency(allocation);
     }
 
@@ -355,6 +357,11 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             );
 
             asyncFetchStore.values().forEach(fetch -> clearCacheForPrimary(fetch, allocation));
+            storeShardBatchLookup.values().forEach(batch ->
+                clearCacheForBatchPrimary(batchIdToStoreShardBatch.get(batch), allocation)
+            );
+
+
             // recalc to also (lazily) clear out old nodes.
             this.lastSeenEphemeralIds = newEphemeralIds;
         }
@@ -368,6 +375,18 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         if (primary != null) {
             fetch.clearCacheForNode(primary.currentNodeId());
         }
+    }
+
+    private static void clearCacheForBatchPrimary(
+        ShardsBatch batch,
+        RoutingAllocation allocation
+    ) {
+        List<ShardRouting> primaries = batch.getBatchedShards().stream()
+            .map(allocation.routingNodes()::activePrimary)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+        AsyncBatchShardFetch<? extends BaseNodeResponse> fetch = batch.getAsyncFetcher();
+        primaries.forEach(node -> fetch.clearCacheForNode(node.currentNodeId()));
     }
 
     private boolean hasNewNodes(DiscoveryNodes nodes) {
@@ -597,14 +616,14 @@ public class GatewayAllocator implements ExistingShardsAllocator {
                 shardToIgnoreNodes.put(shardId, allocation.getIgnoreNodes(shardId));
             }
             AsyncBatchShardFetch<? extends BaseNodeResponse> asyncFetcher = shardsBatch.getAsyncFetcher();
-            AsyncBatchShardFetch.FetchResult<? extends BaseNodeResponse> shardBatchState = asyncFetcher.fetchData(
+            AsyncBatchShardFetch.FetchResult<? extends BaseNodeResponse> shardBatchStores = asyncFetcher.fetchData(
                 allocation.nodes(),
                 shardToIgnoreNodes
             );
-            if (shardBatchState.hasData()) {
-                shardBatchState.processAllocation(allocation);
+            if (shardBatchStores.hasData()) {
+                shardBatchStores.processAllocation(allocation);
             }
-            return (AsyncBatchShardFetch.FetchResult<NodeStoreFilesMetadataBatch>) shardBatchState;
+            return (AsyncBatchShardFetch.FetchResult<NodeStoreFilesMetadataBatch>) shardBatchStores;
         }
 
         @Override
@@ -657,7 +676,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             }
         }
 
-        private void removeFromBatch(ShardRouting shard) {
+        public void removeFromBatch(ShardRouting shard) {
 
             batchInfo.remove(shard.shardId());
             asyncBatch.shardsToCustomDataPathMap.remove(shard.shardId());
