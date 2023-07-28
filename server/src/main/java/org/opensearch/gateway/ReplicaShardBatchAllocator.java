@@ -185,12 +185,11 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
                     AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.fromDecision(allocationDecision.type()),
                         result.v2() != null ? new ArrayList<>(result.v2().values()) : null));
                 continue;
-            } else if (allocationDecision.type() != Decision.Type.YES) {
-                // storing the nodeDecisions in nodeAllocationDecisions if the decision is not YES
-                // so that we don't have to compute the decisions again
-                // ToDo: Check if we need to store or computing again will be cheaper/better
-                nodeAllocationDecisions.put(shard, result);
             }
+            // storing the nodeDecisions in nodeAllocationDecisions if the decision is not YES
+            // so that we don't have to compute the decisions again
+            // ToDo: Check if we need to store or computing again will be cheaper/better
+            nodeAllocationDecisions.put(shard, result);
 
             shardsEligibleForFetch.add(shard);
         }
