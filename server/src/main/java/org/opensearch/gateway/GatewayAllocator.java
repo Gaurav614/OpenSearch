@@ -560,7 +560,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             ShardRouting shardRouting = shardsEligibleForFetch.iterator().hasNext() ? shardsEligibleForFetch.iterator().next() : null;
             shardRouting = shardRouting == null && inEligibleShards.iterator().hasNext() ? inEligibleShards.iterator().next() : shardRouting;
             if (shardRouting == null) {
-                return new AsyncBatchShardFetch<>.FetchResult<>(null, Collections.emptyMap());
+                return new AsyncBatchShardFetch.FetchResult<>(null, Collections.emptyMap());
             }
 
             String batchId = storeShardBatchLookup.getOrDefault(shardRouting.shardId(), null);
@@ -580,7 +580,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
             if (shardsBatch.getBatchedShards().isEmpty() && shardsEligibleForFetch.isEmpty()) {
                 logger.debug("Batch {} is empty", batchId);
-                return new AsyncBatchShardFetch<>.FetchResult<>(null, Collections.emptyMap());
+                return new AsyncBatchShardFetch.FetchResult<>(null, Collections.emptyMap());
             }
             Map<ShardId, Set<String>> shardToIgnoreNodes = new HashMap<>();
             for (ShardId shardId : shardsBatch.asyncBatch.shardsToCustomDataPathMap.keySet()) {
@@ -614,7 +614,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
      */
     private class ShardsBatch {
         private final String batchId;
-        boolean primary;
+        private final boolean primary;
 
         private final AsyncBatchShardFetch<? extends BaseNodeResponse> asyncBatch;
 

@@ -105,7 +105,8 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
                                                              RoutingAllocation allocation,
                                                              Logger logger) {
 
-        return null;
+        return makeAllocationDecision(new HashSet<>(Collections.singletonList(unassignedShard)),
+            allocation, logger).get(unassignedShard);
     }
 
     /**
@@ -168,11 +169,18 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
         return shardAllocationDecisions;
     }
 
-// Below code is very similar to PrimaryShardAllocator class, only difference is that NodeGatewayStartedShards object
-// doesn't have the DiscoveryNode object as BaseNodeResponse. So, DiscoveryNode reference is passed in
-// Map<DiscoveryNode, NodeGatewayStartedShards> so corresponding DiscoveryNode object can be used for rest of the
-// implementation. Also, DiscoveryNode object reference is added in DecidedNode class to achieve same use case of
-// accessing corresponding DiscoveryNode object.
+    /**
+     * Below code is very similar to {@link org.opensearch.gateway.PrimaryShardAllocator} class makeAllocationDecision,
+     * only difference is that NodeGatewayStartedShards object doesn't have the DiscoveryNode object as
+     * BaseNodeResponse. So, DiscoveryNode reference is passed in Map<DiscoveryNode, NodeGatewayStartedShards> so
+     * corresponding DiscoveryNode object can be used for rest of the implementation. Also, DiscoveryNode object
+     * reference is added in DecidedNode class to achieve same use case of accessing corresponding DiscoveryNode object.
+     * @param unassignedShard unassigned shard routing
+     * @param allocation routing allocation object
+     * @param shardState shard metadata fetched from all data nodes
+     * @param logger logger
+     * @return allocation decision taken for this shard
+     */
     private AllocateUnassignedDecision getAllocationDecision(ShardRouting unassignedShard, RoutingAllocation allocation,
                                                              Map<DiscoveryNode, NodeGatewayStartedShards> shardState,
                                                              Logger logger) {
@@ -311,6 +319,13 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
         }
     }
 
+    /**
+     * Skip doing fetchData call for a shard if recovery mode is snapshot. Also do not take decision if allocator is
+     * not responsible for this particular shard.
+     * @param unassignedShard unassigned shard routing
+     * @param allocation routing allocation object
+     * @return allocation decision taken for this shard
+     */
     private AllocateUnassignedDecision skipSnapshotRestore(ShardRouting unassignedShard, RoutingAllocation allocation) {
         if (isResponsibleFor(unassignedShard) == false) {
             // this allocator is not responsible for allocating this shard
@@ -424,7 +439,7 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
             comparator = NO_STORE_EXCEPTION_FIRST_COMPARATOR.thenComparing(PRIMARY_FIRST_COMPARATOR)
                 .thenComparing(HIGHEST_REPLICATION_CHECKPOINT_FIRST_COMPARATOR);
         }
-        // TreeMap will sort the entries based on key
+        // TreeMap will sort the entries based on key, comparator is assigned above
         TreeMap<NodeGatewayStartedShards, DiscoveryNode> shardStatesToNode = new TreeMap<>(comparator);
         int numberOfAllocationsFound = 0;
         for (Map.Entry<DiscoveryNode, NodeGatewayStartedShards> nodeShardStateEntry : shardState.entrySet()) {
