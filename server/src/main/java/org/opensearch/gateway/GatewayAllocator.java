@@ -179,15 +179,30 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     public void beforeAllocation(final RoutingAllocation allocation) {
         assert primaryShardAllocator != null;
         assert replicaShardAllocator != null;
+        assert primaryBatchShardAllocator != null;
+        assert replicaBatchShardAllocator != null;
         ensureAsyncFetchStorePrimaryRecency(allocation);
     }
 
     @Override
     public void afterPrimariesBeforeReplicas(RoutingAllocation allocation) {
-        assert replicaShardAllocator != null;
-        if (allocation.routingNodes().hasInactiveShards()) {
-            // cancel existing recoveries if we have a better match
-            replicaShardAllocator.processExistingRecoveries(allocation);
+        // ToDo: fetch from settings
+        boolean batchMode = true;
+        if (batchMode) {
+            assert replicaBatchShardAllocator != null;
+            List<Set<ShardRouting>> storedShardBatches = batchIdToStoreShardBatch.values().stream()
+                    .map(ShardsBatch::getBatchedShardRoutings)
+                    .collect(Collectors.toList());
+            if (allocation.routingNodes().hasInactiveShards()) {
+                // cancel existing recoveries if we have a better match
+                replicaBatchShardAllocator.processExistingRecoveries(allocation, storedShardBatches);
+            }
+        } else {
+            assert replicaShardAllocator != null;
+            if (allocation.routingNodes().hasInactiveShards()) {
+                // cancel existing recoveries if we have a better match
+                replicaShardAllocator.processExistingRecoveries(allocation);
+            }
         }
     }
 
@@ -278,7 +293,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
      * Cleans the batch if it is empty after removing the shard.
      * This method should be called when removing the shard from the batch instead {@link ShardsBatch#removeFromBatch(ShardRouting)}
      * so that we can clean up the batch if it is empty and release the fetching resources
-     * @param shardRouting
+     * @param shardRouting shard to be removed
      */
     private void safelyRemoveShardFromBatch(ShardRouting shardRouting) {
         String batchId = shardRouting.primary() ? startedShardBatchLookup.get(shardRouting.shardId()) : storeShardBatchLookup.get(shardRouting.shardId());
@@ -345,6 +360,11 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             );
 
             asyncFetchStore.values().forEach(fetch -> clearCacheForPrimary(fetch, allocation));
+            storeShardBatchLookup.values().forEach(batch ->
+                clearCacheForBatchPrimary(batchIdToStoreShardBatch.get(batch), allocation)
+            );
+
+
             // recalc to also (lazily) clear out old nodes.
             this.lastSeenEphemeralIds = newEphemeralIds;
         }
@@ -358,6 +378,18 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         if (primary != null) {
             fetch.clearCacheForNode(primary.currentNodeId());
         }
+    }
+
+    private static void clearCacheForBatchPrimary(
+        ShardsBatch batch,
+        RoutingAllocation allocation
+    ) {
+        List<ShardRouting> primaries = batch.getBatchedShards().stream()
+            .map(allocation.routingNodes()::activePrimary)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+        AsyncBatchShardFetch<? extends BaseNodeResponse> fetch = batch.getAsyncFetcher();
+        primaries.forEach(node -> fetch.clearCacheForNode(node.currentNodeId()));
     }
 
     private boolean hasNewNodes(DiscoveryNodes nodes) {
@@ -587,14 +619,14 @@ public class GatewayAllocator implements ExistingShardsAllocator {
                 shardToIgnoreNodes.put(shardId, allocation.getIgnoreNodes(shardId));
             }
             AsyncBatchShardFetch<? extends BaseNodeResponse> asyncFetcher = shardsBatch.getAsyncFetcher();
-            AsyncBatchShardFetch.FetchResult<? extends BaseNodeResponse> shardBatchState = asyncFetcher.fetchData(
+            AsyncBatchShardFetch.FetchResult<? extends BaseNodeResponse> shardBatchStores = asyncFetcher.fetchData(
                 allocation.nodes(),
                 shardToIgnoreNodes
             );
-            if (shardBatchState.hasData()) {
-                shardBatchState.processAllocation(allocation);
+            if (shardBatchStores.hasData()) {
+                shardBatchStores.processAllocation(allocation);
             }
-            return (AsyncBatchShardFetch.FetchResult<NodeStoreFilesMetadataBatch>) shardBatchState;
+            return (AsyncBatchShardFetch.FetchResult<NodeStoreFilesMetadataBatch>) shardBatchStores;
         }
 
         @Override
@@ -647,7 +679,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             }
         }
 
-        private void removeFromBatch(ShardRouting shard) {
+        public void removeFromBatch(ShardRouting shard) {
 
             batchInfo.remove(shard.shardId());
             asyncBatch.shardsToCustomDataPathMap.remove(shard.shardId());
