@@ -55,8 +55,8 @@ import org.opensearch.common.CheckedSupplier;
 import org.opensearch.common.UUIDs;
 import org.opensearch.common.breaker.CircuitBreaker;
 import org.opensearch.common.component.AbstractLifecycleComponent;
-import org.opensearch.common.io.stream.StreamInput;
-import org.opensearch.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.common.lucene.Lucene;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Setting.Property;
@@ -70,7 +70,7 @@ import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.lease.Releasables;
 import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.index.Index;
+import org.opensearch.core.index.Index;
 import org.opensearch.index.IndexNotFoundException;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
@@ -85,7 +85,7 @@ import org.opensearch.index.query.Rewriteable;
 import org.opensearch.index.shard.IndexEventListener;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.SearchOperationListener;
-import org.opensearch.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.breaker.CircuitBreakerService;
 import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
@@ -1550,7 +1550,9 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
     }
 
     public static boolean canMatchSearchAfter(FieldDoc searchAfter, MinAndMax<?> minMax, FieldSortBuilder primarySortField) {
-        if (searchAfter != null && minMax != null && primarySortField != null) {
+        // Check for sort.missing == null, since in case of missing values sort queries, if segment/shard's min/max
+        // is out of search_after range, it still should be printed and hence we should not skip segment/shard.
+        if (searchAfter != null && minMax != null && primarySortField != null && primarySortField.missing() == null) {
             final Object searchAfterPrimary = searchAfter.fields[0];
             if (primarySortField.order() == SortOrder.DESC) {
                 if (minMax.compareMin(searchAfterPrimary) > 0) {

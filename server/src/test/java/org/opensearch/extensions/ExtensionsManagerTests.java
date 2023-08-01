@@ -23,9 +23,7 @@ import static org.opensearch.test.ClusterServiceUtils.createClusterService;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -45,16 +43,11 @@ import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
 import org.opensearch.client.node.NodeClient;
 import org.opensearch.cluster.ClusterSettingsResponse;
 import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.env.EnvironmentSettingsResponse;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.bytes.BytesReference;
-import org.opensearch.common.io.stream.BytesStreamInput;
 import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.common.network.NetworkService;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
@@ -64,6 +57,9 @@ import org.opensearch.common.settings.WriteableSetting.SettingType;
 import org.opensearch.common.settings.SettingsModule;
 import org.opensearch.common.transport.TransportAddress;
 import org.opensearch.common.util.PageCacheRecycler;
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.io.stream.BytesStreamInput;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.extensions.proto.ExtensionRequestProto;
 import org.opensearch.extensions.rest.RegisterRestActionsRequest;
@@ -97,33 +93,11 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
     private Setting customSetting = Setting.simpleString("custom_extension_setting", "none", Property.ExtensionScope);
     private NodeClient client;
     private MockNioTransport transport;
-    private Path extensionDir;
     private final ThreadPool threadPool = new TestThreadPool(ExtensionsManagerTests.class.getSimpleName());
     private final Settings settings = Settings.builder()
         .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
         .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
         .build();
-    private final List<String> extensionsYmlLines = Arrays.asList(
-        "extensions:",
-        "   - name: firstExtension",
-        "     uniqueId: uniqueid1",
-        "     hostAddress: '127.0.0.0'",
-        "     port: '9300'",
-        "     version: '0.0.7'",
-        "     opensearchVersion: '3.0.0'",
-        "     minimumCompatibleVersion: '3.0.0'",
-        "     custom_extension_setting: 'custom_setting'",
-        "   - name: secondExtension",
-        "     uniqueId: 'uniqueid2'",
-        "     hostAddress: '127.0.0.1'",
-        "     port: '9301'",
-        "     version: '3.14.16'",
-        "     opensearchVersion: '2.0.0'",
-        "     minimumCompatibleVersion: '2.0.0'",
-        "     dependencies:",
-        "       - uniqueId: 'uniqueid0'",
-        "         version: '2.0.0'"
-    );
 
     private DiscoveryExtensionNode extensionNode;
 
@@ -179,8 +153,6 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
         when(actionModule.getRestController()).thenReturn(restController);
         settingsModule = new SettingsModule(Settings.EMPTY, emptyList(), emptyList(), emptySet());
         clusterService = createClusterService(threadPool);
-
-        extensionDir = createTempDir();
 
         extensionNode = new DiscoveryExtensionNode(
             "firstExtension",
@@ -398,16 +370,6 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
         }
     }
 
-    public void testParseExtensionDependency() throws Exception {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{\"uniqueId\": \"test1\", \"version\": \"2.0.0\"}");
-
-        assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
-        ExtensionDependency dependency = ExtensionDependency.parse(parser);
-
-        assertEquals("test1", dependency.getUniqueId());
-        assertEquals(Version.fromString("2.0.0"), dependency.getVersion());
-    }
-
     public void testInitialize() throws Exception {
         ExtensionsManager extensionsManager = new ExtensionsManager(Set.of());
 
@@ -455,8 +417,8 @@ public class ExtensionsManagerTests extends OpenSearchTestCase {
         initialize(extensionsManager);
 
         String uniqueIdStr = "uniqueid1";
-        List<String> actionsList = List.of("GET /foo", "PUT /bar", "POST /baz");
-        List<String> deprecatedActionsList = List.of("GET /deprecated/foo", "It's deprecated!");
+        List<String> actionsList = List.of("GET /foo foo", "PUT /bar bar", "POST /baz baz");
+        List<String> deprecatedActionsList = List.of("GET /deprecated/foo foo_deprecated", "It's deprecated!");
         RegisterRestActionsRequest registerActionsRequest = new RegisterRestActionsRequest(uniqueIdStr, actionsList, deprecatedActionsList);
         TransportResponse response = extensionsManager.getRestActionsRequestHandler()
             .handleRegisterRestActionsRequest(registerActionsRequest, actionModule.getDynamicActionRegistry());

@@ -11,7 +11,9 @@ package org.opensearch.telemetry.tracing;
 /**
  * An interface that represents a tracing span.
  * Spans are created by the Tracer.startSpan method.
- * Span must be ended by calling Tracer.endSpan which internally calls Span's endSpan.
+ * Span must be ended by calling SpanScope.close which internally calls Span's endSpan.
+ *
+ * @opensearch.internal
  */
 public interface Span {
 
@@ -61,6 +63,13 @@ public interface Span {
      * @param value value of the attribute
      */
     void addAttribute(String key, Boolean value);
+
+    /**
+     * Records error in the span
+     *
+     * @param exception exception to be recorded
+     */
+    void setError(Exception exception);
 
     /**
      * Adds an event in the span

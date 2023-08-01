@@ -23,20 +23,19 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
-import org.opensearch.common.io.stream.StreamInput;
-import org.opensearch.common.io.stream.StreamOutput;
-import org.opensearch.common.io.stream.Writeable;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.gateway.AsyncBatchShardFetch;
-import org.opensearch.gateway.AsyncShardsFetchPerNode;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.seqno.ReplicationTracker;
 import org.opensearch.index.seqno.RetentionLease;
 import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.shard.ShardPath;
 import org.opensearch.index.store.Store;
 import org.opensearch.index.store.StoreFileMetadata;
@@ -70,9 +69,9 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
             TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> {
 
     public static final String ACTION_NAME = "internal:cluster/nodes/indices/shard/store/batch";
-    public static final ActionType<TransportNodesListShardStoreMetadata.NodesStoreFilesMetadata> TYPE = new ActionType<>(
+    public static final ActionType<TransportNodesListShardStoreMetadataBatch.NodesStoreFilesMetadataBatch> TYPE = new ActionType<>(
         ACTION_NAME,
-        TransportNodesListShardStoreMetadata.NodesStoreFilesMetadata::new
+        TransportNodesListShardStoreMetadataBatch.NodesStoreFilesMetadataBatch::new
     );
 
     private final Settings settings;
@@ -436,7 +435,11 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
 
         public NodeStoreFilesMetadata(StreamInput in) throws IOException {
             storeFilesMetadata = new StoreFilesMetadata(in);
-            this.storeFileFetchException = null;
+            if (in.readBoolean()) {
+                this.storeFileFetchException = in.readException();
+            } else {
+                this.storeFileFetchException = null;
+            }
         }
 
         public NodeStoreFilesMetadata(StoreFilesMetadata storeFilesMetadata, Exception storeFileFetchException) {
@@ -454,6 +457,12 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
 
         public void writeTo(StreamOutput out) throws IOException {
             storeFilesMetadata.writeTo(out);
+            if (storeFileFetchException != null) {
+                out.writeBoolean(true);
+                out.writeException(storeFileFetchException);
+            } else {
+                out.writeBoolean(false);
+            }
         }
 
         public Exception getStoreFileFetchException() {
