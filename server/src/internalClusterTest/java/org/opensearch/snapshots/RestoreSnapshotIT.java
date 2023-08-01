@@ -52,7 +52,7 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.common.io.PathUtils;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.ByteSizeUnit;
+import org.opensearch.core.common.unit.ByteSizeUnit;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -276,7 +276,10 @@ public class RestoreSnapshotIT extends AbstractSnapshotIntegTestCase {
         assertAcked(client.admin().indices().prepareClose(restoredIndexName1));
         client.admin()
             .cluster()
-            .restoreRemoteStore(new RestoreRemoteStoreRequest().indices(restoredIndexName1), PlainActionFuture.newFuture());
+            .restoreRemoteStore(
+                new RestoreRemoteStoreRequest().indices(restoredIndexName1).restoreAllShards(true),
+                PlainActionFuture.newFuture()
+            );
         ensureYellowAndNoInitializingShards(restoredIndexName1);
         ensureGreen(restoredIndexName1);
         assertDocsPresentInIndex(client(), restoredIndexName1, numDocsInIndex1);
@@ -434,7 +437,9 @@ public class RestoreSnapshotIT extends AbstractSnapshotIntegTestCase {
         // Re-initialize client to make sure we are not using client from stopped node.
         client = client(clusterManagerNode);
         assertAcked(client.admin().indices().prepareClose(indexName1));
-        client.admin().cluster().restoreRemoteStore(new RestoreRemoteStoreRequest().indices(indexName1), PlainActionFuture.newFuture());
+        client.admin()
+            .cluster()
+            .restoreRemoteStore(new RestoreRemoteStoreRequest().indices(indexName1).restoreAllShards(true), PlainActionFuture.newFuture());
         ensureYellowAndNoInitializingShards(indexName1);
         ensureGreen(indexName1);
         assertDocsPresentInIndex(client(), indexName1, numDocsInIndex1);
@@ -515,7 +520,10 @@ public class RestoreSnapshotIT extends AbstractSnapshotIntegTestCase {
         assertAcked(client.admin().indices().prepareClose(restoredIndexName1));
         client.admin()
             .cluster()
-            .restoreRemoteStore(new RestoreRemoteStoreRequest().indices(restoredIndexName1), PlainActionFuture.newFuture());
+            .restoreRemoteStore(
+                new RestoreRemoteStoreRequest().indices(restoredIndexName1).restoreAllShards(true),
+                PlainActionFuture.newFuture()
+            );
         ensureYellowAndNoInitializingShards(restoredIndexName1);
         ensureGreen(restoredIndexName1);
         // indexing some new docs and validating

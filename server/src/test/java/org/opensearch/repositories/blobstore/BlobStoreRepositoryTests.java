@@ -32,7 +32,6 @@
 
 package org.opensearch.repositories.blobstore;
 
-import org.apache.lucene.tests.util.LuceneTestCase;
 import org.opensearch.Version;
 import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesResponse;
 import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
@@ -46,7 +45,7 @@ import org.opensearch.common.UUIDs;
 import org.opensearch.common.blobstore.BlobContainer;
 import org.opensearch.common.blobstore.BlobPath;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.ByteSizeUnit;
+import org.opensearch.core.common.unit.ByteSizeUnit;
 import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
@@ -91,7 +90,6 @@ import static org.opensearch.repositories.RepositoryDataTests.generateRandomRepo
 /**
  * Tests for the {@link BlobStoreRepository} and its subclasses.
  */
-@LuceneTestCase.SuppressFileSystems("ExtrasFS")
 public class BlobStoreRepositoryTests extends OpenSearchSingleNodeTestCase {
 
     static final String REPO_TYPE = "fsLike";
