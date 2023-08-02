@@ -50,11 +50,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 
 /**
  * An abstract class that implements basic functionality for allocating
  * shards to nodes based on shard copies that already exist in the cluster.
- *
+ * <p>
  * Individual implementations of this class are responsible for providing
  * the logic to determine to which nodes (if any) those shards are allocated.
  *
@@ -68,8 +69,9 @@ public abstract class BaseGatewayShardAllocator {
      * Allocate an unassigned shard to nodes (if any) where valid copies of the shard already exist.
      * It is up to the individual implementations of {@link #makeAllocationDecision(ShardRouting, RoutingAllocation, Logger)}
      * to make decisions on assigning shards to nodes.
-     * @param shardRouting the shard to allocate
-     * @param allocation the allocation state container object
+     *
+     * @param shardRouting                the shard to allocate
+     * @param allocation                  the allocation state container object
      * @param unassignedAllocationHandler handles the allocation of the current shard
      */
     public void allocateUnassigned(
@@ -87,10 +89,15 @@ public abstract class BaseGatewayShardAllocator {
             allocation, logger);
         // get all unassigned shards
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = allocation.routingNodes().unassigned().iterator();
-        while (iterator.hasNext()){
+        while (iterator.hasNext()) {
             ShardRouting shard = iterator.next();
-            if (shards.contains(shard)) {
-                executeDecision(shard, decisionMap.get(shard), allocation, iterator);
+            if (shards.stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId())).count() == 1) {
+                List<ShardRouting> matchedShardRouting =
+                    decisionMap.keySet().stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId())).collect(Collectors.toList());
+                executeDecision(shard,
+                    decisionMap.get(matchedShardRouting.get(0)),
+                    allocation,
+                    iterator);
             }
         }
     }
@@ -134,9 +141,9 @@ public abstract class BaseGatewayShardAllocator {
      * {@link #allocateUnassigned(ShardRouting, RoutingAllocation, ExistingShardsAllocator.UnassignedAllocationHandler)} to make decisions
      * about whether or not the shard can be allocated by this allocator and if so, to which node it will be allocated.
      *
-     * @param unassignedShard  the unassigned shard to allocate
-     * @param allocation       the current routing state
-     * @param logger           the logger
+     * @param unassignedShard the unassigned shard to allocate
+     * @param allocation      the current routing state
+     * @param logger          the logger
      * @return an {@link AllocateUnassignedDecision} with the final decision of whether to allocate and details of the decision
      */
     public abstract AllocateUnassignedDecision makeAllocationDecision(
@@ -146,12 +153,12 @@ public abstract class BaseGatewayShardAllocator {
     );
 
     public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(
-            Set<ShardRouting> shards,
-            RoutingAllocation allocation,
-            Logger logger
-    ){
+        Set<ShardRouting> shards,
+        RoutingAllocation allocation,
+        Logger logger
+    ) {
         HashMap<ShardRouting, AllocateUnassignedDecision> allocationDecisions = new HashMap<>();
-        for (ShardRouting unassignedShard: shards){
+        for (ShardRouting unassignedShard : shards) {
             allocationDecisions.put(unassignedShard, makeAllocationDecision(unassignedShard, allocation, logger));
         }
         return allocationDecisions;

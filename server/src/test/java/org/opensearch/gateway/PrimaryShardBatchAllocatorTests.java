@@ -92,7 +92,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
     private final DiscoveryNode node1 = newNode("node1");
     private final DiscoveryNode node2 = newNode("node2");
     private final DiscoveryNode node3 = newNode("node3");
-    private TestAllocator testAllocator;
+    private TestBatchAllocator batchAllocator;
 
     @BeforeClass
     public static void setUpShards() {
@@ -105,13 +105,13 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
 
     @Before
     public void buildTestAllocator() {
-        this.testAllocator = new TestAllocator();
+        this.batchAllocator = new TestBatchAllocator();
     }
 
     private void allocateAllUnassigned(final RoutingAllocation allocation) {
         final RoutingNodes.UnassignedShards.UnassignedIterator iterator = allocation.routingNodes().unassigned().iterator();
         while (iterator.hasNext()) {
-            testAllocator.allocateUnassigned(iterator.next(), allocation, iterator);
+            batchAllocator.allocateUnassigned(iterator.next(), allocation, iterator);
         }
     }
 
@@ -121,7 +121,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
         while (iterator.hasNext()) {
             shardsToBatch.add(iterator.next());
         }
-        testAllocator.allocateUnassignedBatch(shardsToBatch, allocation);
+        batchAllocator.allocateUnassignedBatch(shardsToBatch, allocation);
     }
 
     public void testNoProcessPrimaryNotAllocatedBefore() {
@@ -131,7 +131,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             yesAllocationDeciders(),
             randomFrom(INDEX_CREATED, CLUSTER_RECOVERED, INDEX_REOPENED)
         );
-        allocateAllUnassigned(allocation);
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(false));
         assertThat(allocation.routingNodes().unassigned().size(), equalTo(1));
         assertThat(allocation.routingNodes().unassigned().iterator().next().shardId(), equalTo(shardId));
@@ -147,7 +147,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             CLUSTER_RECOVERED,
             "allocId"
         );
-        allocateAllUnassigned(allocation);
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().size(), equalTo(1));
         assertThat(allocation.routingNodes().unassigned().ignored().get(0).shardId(), equalTo(shardId));
@@ -164,8 +164,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             CLUSTER_RECOVERED,
             "allocId"
         );
-        testAllocator.addData(node1, null, randomBoolean());
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, null, randomBoolean());
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().size(), equalTo(1));
         assertThat(allocation.routingNodes().unassigned().ignored().get(0).shardId(), equalTo(shardId));
@@ -178,8 +178,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
      */
     public void testNoMatchingAllocationIdFound() {
         RoutingAllocation allocation = routingAllocationWithOnePrimaryNoReplicas(yesAllocationDeciders(), CLUSTER_RECOVERED, "id2");
-        testAllocator.addData(node1, "id1", randomBoolean());
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, "id1", randomBoolean());
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().size(), equalTo(1));
         assertThat(allocation.routingNodes().unassigned().ignored().get(0).shardId(), equalTo(shardId));
@@ -195,8 +195,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             CLUSTER_RECOVERED,
             "allocId1"
         );
-        testAllocator.addData(node1, "allocId1", randomBoolean(), new CorruptIndexException("test", "test"));
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, "allocId1", randomBoolean(), new CorruptIndexException("test", "test"));
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().size(), equalTo(1));
         assertThat(allocation.routingNodes().unassigned().ignored().get(0).shardId(), equalTo(shardId));
@@ -212,8 +212,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             CLUSTER_RECOVERED,
             "allocId1"
         );
-        testAllocator.addData(node1, "allocId1", randomBoolean(), new ShardLockObtainFailedException(shardId, "test"));
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, "allocId1", randomBoolean(), new ShardLockObtainFailedException(shardId, "test"));
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -243,10 +243,10 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             allocId2,
             allocId3
         );
-        testAllocator.addData(node1, allocId1, false, new ReplicationCheckpoint(shardId, 20, 101, 1, Codec.getDefault().getName()));
-        testAllocator.addData(node2, allocId2, false, new ReplicationCheckpoint(shardId, 22, 120, 2, Codec.getDefault().getName()));
-        testAllocator.addData(node3, allocId3, false, new ReplicationCheckpoint(shardId, 20, 120, 2, Codec.getDefault().getName()));
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, allocId1, false, new ReplicationCheckpoint(shardId, 20, 101, 1, Codec.getDefault().getName()));
+        batchAllocator.addData(node2, allocId2, false, new ReplicationCheckpoint(shardId, 22, 120, 2, Codec.getDefault().getName()));
+        batchAllocator.addData(node3, allocId3, false, new ReplicationCheckpoint(shardId, 20, 120, 2, Codec.getDefault().getName()));
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -276,10 +276,10 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             allocId2,
             allocId3
         );
-        testAllocator.addData(node1, allocId1, false, new ReplicationCheckpoint(shardId, 20, 101, 1, Codec.getDefault().getName()));
-        testAllocator.addData(node2, allocId2, false);
-        testAllocator.addData(node3, allocId3, false, new ReplicationCheckpoint(shardId, 40, 120, 2, Codec.getDefault().getName()));
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, allocId1, false, new ReplicationCheckpoint(shardId, 20, 101, 1, Codec.getDefault().getName()));
+        batchAllocator.addData(node2, allocId2, false);
+        batchAllocator.addData(node3, allocId3, false, new ReplicationCheckpoint(shardId, 40, 120, 2, Codec.getDefault().getName()));
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -309,10 +309,10 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             allocId2,
             allocId3
         );
-        testAllocator.addData(node1, allocId1, false, null, null);
-        testAllocator.addData(node2, allocId2, false, null, null);
-        testAllocator.addData(node3, allocId3, true, null, null);
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, allocId1, false, null, null);
+        batchAllocator.addData(node2, allocId2, false, null, null);
+        batchAllocator.addData(node3, allocId3, true, null, null);
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -342,10 +342,10 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             allocId2,
             allocId3
         );
-        testAllocator.addData(node1, allocId1, false, new ReplicationCheckpoint(shardId, 10, 101, 1, Codec.getDefault().getName()));
-        testAllocator.addData(node2, allocId2, false, new ReplicationCheckpoint(shardId, 20, 120, 3, Codec.getDefault().getName()));
-        testAllocator.addData(node3, allocId3, false, new ReplicationCheckpoint(shardId, 20, 120, 2, Codec.getDefault().getName()));
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, allocId1, false, new ReplicationCheckpoint(shardId, 10, 101, 1, Codec.getDefault().getName()));
+        batchAllocator.addData(node2, allocId2, false, new ReplicationCheckpoint(shardId, 20, 120, 3, Codec.getDefault().getName()));
+        batchAllocator.addData(node3, allocId3, false, new ReplicationCheckpoint(shardId, 20, 120, 2, Codec.getDefault().getName()));
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -374,10 +374,10 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             allocId1,
             allocId3
         );
-        testAllocator.addData(node1, allocId1, false, new ReplicationCheckpoint(shardId, 10, 101, 1, Codec.getDefault().getName()));
-        testAllocator.addData(node2, allocId2, false, new ReplicationCheckpoint(shardId, 20, 120, 2, Codec.getDefault().getName()));
-        testAllocator.addData(node3, allocId3, false, new ReplicationCheckpoint(shardId, 15, 120, 2, Codec.getDefault().getName()));
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, allocId1, false, new ReplicationCheckpoint(shardId, 10, 101, 1, Codec.getDefault().getName()));
+        batchAllocator.addData(node2, allocId2, false, new ReplicationCheckpoint(shardId, 20, 120, 2, Codec.getDefault().getName()));
+        batchAllocator.addData(node3, allocId3, false, new ReplicationCheckpoint(shardId, 15, 120, 2, Codec.getDefault().getName()));
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -407,10 +407,10 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             allocId2,
             allocId3
         );
-        testAllocator.addData(node1, allocId1, true, new ReplicationCheckpoint(shardId, 10, 101, 1, Codec.getDefault().getName()));
-        testAllocator.addData(node2, allocId2, false, new ReplicationCheckpoint(shardId, 20, 120, 2, Codec.getDefault().getName()));
-        testAllocator.addData(node3, allocId3, false, new ReplicationCheckpoint(shardId, 15, 120, 2, Codec.getDefault().getName()));
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, allocId1, true, new ReplicationCheckpoint(shardId, 10, 101, 1, Codec.getDefault().getName()));
+        batchAllocator.addData(node2, allocId2, false, new ReplicationCheckpoint(shardId, 20, 120, 2, Codec.getDefault().getName()));
+        batchAllocator.addData(node3, allocId3, false, new ReplicationCheckpoint(shardId, 15, 120, 2, Codec.getDefault().getName()));
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -439,9 +439,9 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             allocId1,
             allocId2
         );
-        testAllocator.addData(node1, allocId1, randomBoolean(), new ShardLockObtainFailedException(shardId, "test"));
-        testAllocator.addData(node2, allocId2, randomBoolean());
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, allocId1, randomBoolean(), new ShardLockObtainFailedException(shardId, "test"));
+        batchAllocator.addData(node2, allocId2, randomBoolean());
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -466,8 +466,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             randomFrom(CLUSTER_RECOVERED, INDEX_REOPENED),
             "allocId1"
         );
-        testAllocator.addData(node1, "allocId1", randomBoolean());
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, "allocId1", randomBoolean());
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -489,7 +489,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
      * returns a YES decision for at least one of those NO nodes, then we force allocate to one of them
      */
     public void testForceAllocatePrimary() {
-        testAllocator.addData(node1, "allocId1", randomBoolean());
+        batchAllocator.addData(node1, "allocId1", randomBoolean());
         AllocationDeciders deciders = new AllocationDeciders(
             Arrays.asList(
                 // since the deciders return a NO decision for allocating a shard (due to the guaranteed NO decision from the second
@@ -500,7 +500,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             )
         );
         RoutingAllocation allocation = routingAllocationWithOnePrimaryNoReplicas(deciders, CLUSTER_RECOVERED, "allocId1");
-        allocateAllUnassigned(allocation);
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertTrue(allocation.routingNodes().unassigned().ignored().isEmpty());
         assertEquals(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), 1);
@@ -513,7 +513,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
      * returns a NO or THROTTLE decision for a node, then we do not force allocate to that node.
      */
     public void testDontAllocateOnNoOrThrottleForceAllocationDecision() {
-        testAllocator.addData(node1, "allocId1", randomBoolean());
+        batchAllocator.addData(node1, "allocId1", randomBoolean());
         boolean forceDecisionNo = randomBoolean();
         AllocationDeciders deciders = new AllocationDeciders(
             Arrays.asList(
@@ -525,7 +525,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             )
         );
         RoutingAllocation allocation = routingAllocationWithOnePrimaryNoReplicas(deciders, CLUSTER_RECOVERED, "allocId1");
-        allocateAllUnassigned(allocation);
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         List<ShardRouting> ignored = allocation.routingNodes().unassigned().ignored();
         assertEquals(ignored.size(), 1);
@@ -541,7 +541,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
      * then we do not force allocate to that node but instead throttle.
      */
     public void testDontForceAllocateOnThrottleDecision() {
-        testAllocator.addData(node1, "allocId1", randomBoolean());
+        batchAllocator.addData(node1, "allocId1", randomBoolean());
         AllocationDeciders deciders = new AllocationDeciders(
             Arrays.asList(
                 // since we have a NO decision for allocating a shard (because the second decider returns a NO decision),
@@ -554,7 +554,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             )
         );
         RoutingAllocation allocation = routingAllocationWithOnePrimaryNoReplicas(deciders, CLUSTER_RECOVERED, "allocId1");
-        allocateAllUnassigned(allocation);
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         List<ShardRouting> ignored = allocation.routingNodes().unassigned().ignored();
         assertEquals(ignored.size(), 1);
@@ -575,9 +575,9 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             replicaAllocId
         );
         boolean node1HasPrimaryShard = randomBoolean();
-        testAllocator.addData(node1, node1HasPrimaryShard ? primaryAllocId : replicaAllocId, node1HasPrimaryShard);
-        testAllocator.addData(node2, node1HasPrimaryShard ? replicaAllocId : primaryAllocId, !node1HasPrimaryShard);
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, node1HasPrimaryShard ? primaryAllocId : replicaAllocId, node1HasPrimaryShard);
+        batchAllocator.addData(node2, node1HasPrimaryShard ? replicaAllocId : primaryAllocId, !node1HasPrimaryShard);
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -599,8 +599,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             CLUSTER_RECOVERED,
             "allocId1"
         );
-        testAllocator.addData(node1, "allocId1", randomBoolean());
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, "allocId1", randomBoolean());
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().size(), equalTo(1));
         assertThat(allocation.routingNodes().unassigned().ignored().get(0).shardId(), equalTo(shardId));
@@ -617,8 +617,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             CLUSTER_RECOVERED,
             "allocId1"
         );
-        testAllocator.addData(node1, "allocId1", randomBoolean());
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, "allocId1", randomBoolean());
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -635,8 +635,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
      */
     public void testRestore() {
         RoutingAllocation allocation = getRestoreRoutingAllocation(yesAllocationDeciders(), randomLong(), "allocId");
-        testAllocator.addData(node1, "some allocId", randomBoolean());
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, "some allocId", randomBoolean());
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
@@ -649,8 +649,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
      */
     public void testRestoreThrottle() {
         RoutingAllocation allocation = getRestoreRoutingAllocation(throttleAllocationDeciders(), randomLong(), "allocId");
-        testAllocator.addData(node1, "some allocId", randomBoolean());
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, "some allocId", randomBoolean());
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(false));
         assertClusterHealthStatus(allocation, ClusterHealthStatus.YELLOW);
@@ -663,8 +663,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
     public void testRestoreForcesAllocateIfShardAvailable() {
         final long shardSize = randomNonNegativeLong();
         RoutingAllocation allocation = getRestoreRoutingAllocation(noAllocationDeciders(), shardSize, "allocId");
-        testAllocator.addData(node1, "some allocId", randomBoolean());
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, "some allocId", randomBoolean());
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         final List<ShardRouting> initializingShards = allocation.routingNodes().shardsWithState(ShardRoutingState.INITIALIZING);
@@ -679,8 +679,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
      */
     public void testRestoreDoesNotAssignIfNoShardAvailable() {
         RoutingAllocation allocation = getRestoreRoutingAllocation(yesAllocationDeciders(), randomNonNegativeLong(), "allocId");
-        testAllocator.addData(node1, null, randomBoolean());
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, null, randomBoolean());
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(false));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().size(), equalTo(1));
@@ -693,8 +693,8 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
      */
     public void testRestoreDoesNotAssignIfShardSizeNotAvailable() {
         RoutingAllocation allocation = getRestoreRoutingAllocation(yesAllocationDeciders(), null, "allocId");
-        testAllocator.addData(node1, null, false);
-        allocateAllUnassigned(allocation);
+        batchAllocator.addData(node1, null, false);
+        allocateAllUnassignedBatch(allocation);
         assertThat(allocation.routingNodesChanged(), equalTo(true));
         assertThat(allocation.routingNodes().unassigned().ignored().isEmpty(), equalTo(false));
         ShardRouting ignoredRouting = allocation.routingNodes().unassigned().ignored().get(0);
@@ -775,6 +775,44 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
         return new RoutingAllocation(deciders, new RoutingNodes(state, false), state, null, null, System.nanoTime());
     }
 
+    private RoutingAllocation routingAllocationWithMultiplePrimaryNoReplicas(
+        AllocationDeciders deciders,
+        UnassignedInfo.Reason reason,
+        String... activeAllocationIds
+    ) {
+        Metadata metadata = Metadata.builder()
+            .put(
+                IndexMetadata.builder(shardId.getIndexName())
+                    .settings(settings(Version.CURRENT))
+                    .numberOfShards(10)
+                    .numberOfReplicas(0)
+                    .putInSyncAllocationIds(shardId.id(), Sets.newHashSet(activeAllocationIds))
+            )
+            .build();
+
+        RoutingTable.Builder routingTableBuilder = RoutingTable.builder();
+        switch (reason) {
+
+            case INDEX_CREATED:
+                routingTableBuilder.addAsNew(metadata.index(shardId.getIndex()));
+                break;
+            case CLUSTER_RECOVERED:
+                routingTableBuilder.addAsRecovery(metadata.index(shardId.getIndex()));
+                break;
+            case INDEX_REOPENED:
+                routingTableBuilder.addAsFromCloseToOpen(metadata.index(shardId.getIndex()));
+                break;
+            default:
+                throw new IllegalArgumentException("can't do " + reason + " for you. teach me");
+        }
+        ClusterState state = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+            .metadata(metadata)
+            .routingTable(routingTableBuilder.build())
+            .nodes(DiscoveryNodes.builder().add(node1).add(node2).add(node3))
+            .build();
+        return new RoutingAllocation(deciders, new RoutingNodes(state, false), state, null, null, System.nanoTime());
+    }
+
     private void assertClusterHealthStatus(RoutingAllocation allocation, ClusterHealthStatus expectedStatus) {
         RoutingTable oldRoutingTable = allocation.routingTable();
         RoutingNodes newRoutingNodes = allocation.routingNodes();
@@ -806,16 +844,16 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
         };
     }
 
-    class TestAllocator extends PrimaryShardBatchAllocator {
+    class TestBatchAllocator extends PrimaryShardBatchAllocator {
 
         private Map<DiscoveryNode, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> data;
 
-        public TestAllocator clear() {
+        public TestBatchAllocator clear() {
             data = null;
             return this;
         }
 
-        public TestAllocator addData(
+        public TestBatchAllocator addData(
             DiscoveryNode node,
             String allocationId,
             boolean primary,
@@ -824,7 +862,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             return addData(node, allocationId, primary, replicationCheckpoint, null);
         }
 
-        public TestAllocator addData(DiscoveryNode node, String allocationId, boolean primary) {
+        public TestBatchAllocator addData(DiscoveryNode node, String allocationId, boolean primary) {
             return addData(
                 node,
                 allocationId,
@@ -834,7 +872,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             );
         }
 
-        public TestAllocator addData(DiscoveryNode node, String allocationId, boolean primary, @Nullable Exception storeException) {
+        public TestBatchAllocator addData(DiscoveryNode node, String allocationId, boolean primary, @Nullable Exception storeException) {
             return addData(
                 node,
                 allocationId,
@@ -844,7 +882,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             );
         }
 
-        public TestAllocator addData(
+        public TestBatchAllocator addData(
             DiscoveryNode node,
             String allocationId,
             boolean primary,

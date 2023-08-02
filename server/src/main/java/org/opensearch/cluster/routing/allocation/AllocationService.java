@@ -549,6 +549,7 @@ public class AllocationService {
         }
         // batch Mode enabled setting to be added
         boolean batchModeEnabled = true;
+        // ToDo: Add logic
         if (batchModeEnabled) {
             // since allocators is per index setting, to have batch assignment verify allocators same for all shards
             // if not fallback to single assignment
