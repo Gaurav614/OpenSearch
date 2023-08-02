@@ -40,13 +40,14 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.metadata.RepositoryMetadata;
 import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.component.Lifecycle;
-import org.opensearch.common.component.LifecycleListener;
+import org.opensearch.common.lifecycle.Lifecycle;
+import org.opensearch.common.lifecycle.LifecycleListener;
 import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
 import org.opensearch.index.snapshots.blobstore.RemoteStoreShardShallowCopySnapshot;
 import org.opensearch.index.store.Store;
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
 import org.opensearch.indices.recovery.RecoveryState;
 import org.opensearch.snapshots.SnapshotId;
 import org.opensearch.snapshots.SnapshotInfo;
@@ -246,6 +247,18 @@ public class FilterRepository implements Repository {
         Consumer<Exception> onFailure
     ) {
         in.executeConsistentStateUpdate(createUpdateTask, source, onFailure);
+    }
+
+    @Override
+    public void cloneRemoteStoreIndexShardSnapshot(
+        SnapshotId source,
+        SnapshotId target,
+        RepositoryShardId shardId,
+        String shardGeneration,
+        RemoteStoreLockManagerFactory remoteStoreLockManagerFactory,
+        ActionListener<String> listener
+    ) {
+        in.cloneRemoteStoreIndexShardSnapshot(source, target, shardId, shardGeneration, remoteStoreLockManagerFactory, listener);
     }
 
     @Override

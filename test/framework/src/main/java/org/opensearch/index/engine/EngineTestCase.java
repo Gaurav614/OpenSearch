@@ -49,6 +49,7 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.LiveIndexWriterConfig;
 import org.apache.lucene.index.MergePolicy;
 import org.apache.lucene.index.NumericDocValues;
+import org.apache.lucene.index.StoredFields;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.IndexSearcher;
@@ -73,8 +74,8 @@ import org.opensearch.common.CheckedBiFunction;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.Randomness;
 import org.opensearch.common.Strings;
-import org.opensearch.common.bytes.BytesArray;
-import org.opensearch.common.bytes.BytesReference;
+import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.concurrent.GatedCloseable;
 import org.opensearch.common.lucene.Lucene;
@@ -88,7 +89,7 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.index.Index;
+import org.opensearch.core.index.Index;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.MapperTestUtils;
 import org.opensearch.index.VersionType;
@@ -109,7 +110,7 @@ import org.opensearch.index.seqno.LocalCheckpointTracker;
 import org.opensearch.index.seqno.ReplicationTracker;
 import org.opensearch.index.seqno.RetentionLeases;
 import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.store.Store;
 import org.opensearch.index.translog.InternalTranslogManager;
 import org.opensearch.index.translog.LocalTranslog;
@@ -118,8 +119,8 @@ import org.opensearch.index.translog.TranslogConfig;
 import org.opensearch.index.translog.TranslogDeletionPolicy;
 import org.opensearch.index.translog.TranslogManager;
 import org.opensearch.index.translog.listener.TranslogEventListener;
-import org.opensearch.indices.breaker.CircuitBreakerService;
-import org.opensearch.indices.breaker.NoneCircuitBreakerService;
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
 import org.opensearch.test.DummyShardLock;
 import org.opensearch.test.IndexSettingsModule;
 import org.opensearch.test.OpenSearchTestCase;
@@ -211,7 +212,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
     public void setUp() throws Exception {
         super.setUp();
         primaryTerm.set(randomLongBetween(1, Long.MAX_VALUE));
-        CodecService codecService = new CodecService(null, logger);
+        CodecService codecService = new CodecService(null, INDEX_SETTINGS, logger);
         String name = Codec.getDefault().getName();
         if (Arrays.asList(codecService.availableCodecs()).contains(name)) {
             // some codecs are read only so we only take the ones that we have in the service and randomly
@@ -255,7 +256,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
             .mergePolicy(config.getMergePolicy())
             .analyzer(config.getAnalyzer())
             .similarity(config.getSimilarity())
-            .codecService(new CodecService(null, logger))
+            .codecService(new CodecService(null, config.getIndexSettings(), logger))
             .eventListener(config.getEventListener())
             .queryCache(config.getQueryCache())
             .queryCachingPolicy(config.getQueryCachingPolicy())
@@ -281,7 +282,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
             .mergePolicy(config.getMergePolicy())
             .analyzer(analyzer)
             .similarity(config.getSimilarity())
-            .codecService(new CodecService(null, logger))
+            .codecService(new CodecService(null, config.getIndexSettings(), logger))
             .eventListener(config.getEventListener())
             .queryCache(config.getQueryCache())
             .queryCachingPolicy(config.getQueryCachingPolicy())
@@ -307,7 +308,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
             .mergePolicy(mergePolicy)
             .analyzer(config.getAnalyzer())
             .similarity(config.getSimilarity())
-            .codecService(new CodecService(null, logger))
+            .codecService(new CodecService(null, config.getIndexSettings(), logger))
             .eventListener(config.getEventListener())
             .queryCache(config.getQueryCache())
             .queryCachingPolicy(config.getQueryCachingPolicy())
@@ -872,7 +873,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
             .mergePolicy(mergePolicy)
             .analyzer(iwc.getAnalyzer())
             .similarity(iwc.getSimilarity())
-            .codecService(new CodecService(null, logger))
+            .codecService(new CodecService(null, indexSettings, logger))
             .eventListener(eventListener)
             .queryCache(IndexSearcher.getDefaultQueryCache())
             .queryCachingPolicy(IndexSearcher.getDefaultQueryCachingPolicy())
@@ -911,7 +912,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
             .mergePolicy(config.getMergePolicy())
             .analyzer(config.getAnalyzer())
             .similarity(config.getSimilarity())
-            .codecService(new CodecService(null, logger))
+            .codecService(new CodecService(null, indexSettings, logger))
             .eventListener(config.getEventListener())
             .queryCache(config.getQueryCache())
             .queryCachingPolicy(config.getQueryCachingPolicy())
@@ -1302,6 +1303,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
                 NumericDocValues primaryTermDocValues = reader.getNumericDocValues(SeqNoFieldMapper.PRIMARY_TERM_NAME);
                 NumericDocValues versionDocValues = reader.getNumericDocValues(VersionFieldMapper.NAME);
                 Bits liveDocs = reader.getLiveDocs();
+                StoredFields storedFields = reader.storedFields();
                 for (int i = 0; i < reader.maxDoc(); i++) {
                     if (liveDocs == null || liveDocs.get(i)) {
                         if (primaryTermDocValues.advanceExact(i) == false) {
@@ -1309,7 +1311,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
                             continue;
                         }
                         final long primaryTerm = primaryTermDocValues.longValue();
-                        Document doc = reader.document(i, Sets.newHashSet(IdFieldMapper.NAME, SourceFieldMapper.NAME));
+                        Document doc = storedFields.document(i, Sets.newHashSet(IdFieldMapper.NAME, SourceFieldMapper.NAME));
                         BytesRef binaryID = doc.getBinaryValue(IdFieldMapper.NAME);
                         String id = Uid.decodeId(Arrays.copyOfRange(binaryID.bytes, binaryID.offset, binaryID.offset + binaryID.length));
                         final BytesRef source = doc.getBinaryValue(SourceFieldMapper.NAME);
@@ -1463,6 +1465,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
         for (LeafReaderContext leaf : wrappedReader.leaves()) {
             NumericDocValues primaryTermDocValues = leaf.reader().getNumericDocValues(SeqNoFieldMapper.PRIMARY_TERM_NAME);
             NumericDocValues seqNoDocValues = leaf.reader().getNumericDocValues(SeqNoFieldMapper.NAME);
+            final StoredFields storedFields = leaf.reader().storedFields();
             int docId;
             while ((docId = seqNoDocValues.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
                 assertTrue(seqNoDocValues.advanceExact(docId));
@@ -1471,7 +1474,7 @@ public abstract class EngineTestCase extends OpenSearchTestCase {
                 if (primaryTermDocValues.advanceExact(docId)) {
                     if (seqNos.add(seqNo) == false) {
                         final IdOnlyFieldVisitor idFieldVisitor = new IdOnlyFieldVisitor();
-                        leaf.reader().document(docId, idFieldVisitor);
+                        storedFields.document(docId, idFieldVisitor);
                         throw new AssertionError("found multiple documents for seq=" + seqNo + " id=" + idFieldVisitor.getId());
                     }
                 }

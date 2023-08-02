@@ -8,7 +8,7 @@
 
 package org.opensearch;
 
-import org.opensearch.index.snapshots.IndexShardSnapshotException;
+import org.opensearch.core.index.snapshots.IndexShardSnapshotException;
 
 import static org.opensearch.OpenSearchException.OpenSearchExceptionHandle;
 import static org.opensearch.OpenSearchException.OpenSearchExceptionHandleRegistry.registerExceptionHandle;
@@ -285,14 +285,6 @@ public final class OpenSearchServerException {
                 org.opensearch.transport.TransportException.class,
                 org.opensearch.transport.TransportException::new,
                 34,
-                UNKNOWN_VERSION_ADDED
-            )
-        );
-        registerExceptionHandle(
-            new OpenSearchExceptionHandle(
-                org.opensearch.OpenSearchParseException.class,
-                org.opensearch.OpenSearchParseException::new,
-                35,
                 UNKNOWN_VERSION_ADDED
             )
         );
@@ -912,14 +904,6 @@ public final class OpenSearchServerException {
                 org.opensearch.index.engine.FlushFailedEngineException.class,
                 org.opensearch.index.engine.FlushFailedEngineException::new,
                 132,
-                UNKNOWN_VERSION_ADDED
-            )
-        );
-        registerExceptionHandle(
-            new OpenSearchExceptionHandle(
-                org.opensearch.common.breaker.CircuitBreakingException.class,
-                org.opensearch.common.breaker.CircuitBreakingException::new,
-                133,
                 UNKNOWN_VERSION_ADDED
             )
         );

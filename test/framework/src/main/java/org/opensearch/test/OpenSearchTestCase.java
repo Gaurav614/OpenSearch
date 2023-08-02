@@ -69,21 +69,21 @@ import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.common.CheckedRunnable;
 import org.opensearch.common.Numbers;
 import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.bytes.BytesArray;
-import org.opensearch.common.bytes.BytesReference;
+import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.common.io.PathUtils;
 import org.opensearch.common.io.PathUtilsForTesting;
 import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.io.stream.NamedWriteable;
-import org.opensearch.common.io.stream.NamedWriteableAwareStreamInput;
-import org.opensearch.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.common.io.stream.StreamInput;
-import org.opensearch.common.io.stream.Writeable;
+import org.opensearch.core.common.io.stream.NamedWriteable;
+import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.core.index.Index;
 import org.opensearch.common.joda.JodaDeprecationPatterns;
 import org.opensearch.common.logging.DeprecatedMessage;
 import org.opensearch.common.logging.HeaderWarning;
 import org.opensearch.common.logging.HeaderWarningAppender;
-import org.opensearch.common.logging.LogConfigurator;
 import org.opensearch.common.logging.Loggers;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
@@ -95,9 +95,9 @@ import org.opensearch.common.util.MockPageCacheRecycler;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.common.util.set.Sets;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.MediaType;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
@@ -108,7 +108,7 @@ import org.opensearch.core.xcontent.XContentParser.Token;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.env.TestEnvironment;
-import org.opensearch.index.Index;
+import org.opensearch.index.IndexModule;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.index.analysis.AnalyzerScope;
@@ -117,6 +117,7 @@ import org.opensearch.index.analysis.IndexAnalyzers;
 import org.opensearch.index.analysis.NamedAnalyzer;
 import org.opensearch.index.analysis.TokenFilterFactory;
 import org.opensearch.index.analysis.TokenizerFactory;
+import org.opensearch.index.store.remote.filecache.FileCache;
 import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.monitor.jvm.JvmInfo;
 import org.opensearch.plugins.AnalysisPlugin;
@@ -238,7 +239,6 @@ public abstract class OpenSearchTestCase extends LuceneTestCase {
     static {
         TEST_WORKER_VM_ID = System.getProperty(TEST_WORKER_SYS_PROPERTY, DEFAULT_TEST_WORKER_ID);
         setTestSysProps();
-        LogConfigurator.loadLog4jPlugins();
 
         String leakLoggerName = "io.netty.util.ResourceLeakDetector";
         Logger leakLogger = LogManager.getLogger(leakLoggerName);
@@ -1200,6 +1200,14 @@ public abstract class OpenSearchTestCase extends LuceneTestCase {
         return builder;
     }
 
+    public static Settings.Builder remoteIndexSettings(Version version) {
+        Settings.Builder builder = Settings.builder()
+            .put(FileCache.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 5)
+            .put(IndexMetadata.SETTING_VERSION_CREATED, version)
+            .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.REMOTE_SNAPSHOT.getSettingsKey());
+        return builder;
+    }
+
     /**
      * Returns size random values
      */
@@ -1331,7 +1339,7 @@ public abstract class OpenSearchTestCase extends LuceneTestCase {
      */
     public static XContentBuilder shuffleXContent(XContentParser parser, boolean prettyPrint, String... exceptFieldNames)
         throws IOException {
-        XContentBuilder xContentBuilder = XContentFactory.contentBuilder(parser.contentType());
+        XContentBuilder xContentBuilder = MediaTypeRegistry.contentBuilder(parser.contentType());
         if (prettyPrint) {
             xContentBuilder.prettyPrint();
         }

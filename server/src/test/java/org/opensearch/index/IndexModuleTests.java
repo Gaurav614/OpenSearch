@@ -56,7 +56,7 @@ import org.opensearch.common.CheckedFunction;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.SetOnce.AlreadySetException;
 import org.opensearch.common.UUIDs;
-import org.opensearch.common.breaker.CircuitBreaker;
+import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Setting.Property;
 import org.opensearch.common.settings.Settings;
@@ -66,6 +66,7 @@ import org.opensearch.common.util.PageCacheRecycler;
 import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.common.util.io.IOUtils;
+import org.opensearch.core.index.Index;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.env.ShardLock;
@@ -86,7 +87,7 @@ import org.opensearch.index.mapper.Uid;
 import org.opensearch.index.shard.IndexEventListener;
 import org.opensearch.index.shard.IndexingOperationListener;
 import org.opensearch.index.shard.SearchOperationListener;
-import org.opensearch.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.shard.ShardPath;
 import org.opensearch.index.similarity.NonNegativeScoresSimilarity;
 import org.opensearch.index.similarity.SimilarityService;
@@ -98,8 +99,8 @@ import org.opensearch.index.translog.TranslogFactory;
 import org.opensearch.indices.IndicesModule;
 import org.opensearch.indices.IndicesQueryCache;
 import org.opensearch.indices.analysis.AnalysisModule;
-import org.opensearch.indices.breaker.CircuitBreakerService;
-import org.opensearch.indices.breaker.NoneCircuitBreakerService;
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
 import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
 import org.opensearch.indices.fielddata.cache.IndicesFieldDataCache;
 import org.opensearch.indices.mapper.MapperRegistry;
@@ -252,7 +253,7 @@ public class IndexModuleTests extends OpenSearchTestCase {
             writableRegistry(),
             () -> false,
             null,
-            new RemoteSegmentStoreDirectoryFactory(() -> repositoriesService),
+            new RemoteSegmentStoreDirectoryFactory(() -> repositoriesService, threadPool),
             translogFactorySupplier
         );
     }

@@ -32,10 +32,10 @@
 
 package org.opensearch.search.profile.aggregation;
 
-import org.opensearch.common.bytes.BytesReference;
+import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.common.xcontent.XContentParserUtils;
+import org.opensearch.core.xcontent.XContentParserUtils;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.search.profile.ProfileResult;
 import org.opensearch.search.profile.ProfileResultTests;
@@ -57,7 +57,7 @@ public class AggregationProfileShardResultTests extends OpenSearchTestCase {
         int size = randomIntBetween(0, 5);
         List<ProfileResult> aggProfileResults = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {
-            aggProfileResults.add(ProfileResultTests.createTestItem(1));
+            aggProfileResults.add(ProfileResultTests.createTestItem(depth, false));
         }
         return new AggregationProfileShardResult(aggProfileResults);
     }

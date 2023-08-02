@@ -21,9 +21,9 @@ import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.concurrent.GatedCloseable;
+import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.lease.Releasable;
 import org.opensearch.index.engine.InternalEngineFactory;
 import org.opensearch.index.remote.RemoteRefreshSegmentPressureService;
 import org.opensearch.index.remote.RemoteRefreshSegmentTracker;
@@ -56,12 +56,19 @@ public class RemoteStoreRefreshListenerTests extends IndexShardTestCase {
     public void setup(boolean primary, int numberOfDocs) throws IOException {
         indexShard = newStartedShard(
             primary,
-            Settings.builder().put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true).build(),
+            Settings.builder()
+                .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
+                .put(IndexMetadata.SETTING_REMOTE_SEGMENT_STORE_REPOSITORY, "temp-fs")
+                .put(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY, "temp-fs")
+                .put(SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+                .build(),
             new InternalEngineFactory()
         );
 
-        indexDocs(1, numberOfDocs);
-        indexShard.refresh("test");
+        if (primary) {
+            indexDocs(1, numberOfDocs);
+            indexShard.refresh("test");
+        }
 
         clusterService = new ClusterService(
             Settings.EMPTY,
@@ -249,10 +256,7 @@ public class RemoteStoreRefreshListenerTests extends IndexShardTestCase {
         assertBusy(() -> assertEquals(0, successLatch.getCount()));
         RemoteRefreshSegmentPressureService pressureService = tuple.v2();
         RemoteRefreshSegmentTracker segmentTracker = pressureService.getRemoteRefreshSegmentTracker(indexShard.shardId());
-        assertEquals(0, segmentTracker.getBytesLag());
-        assertEquals(0, segmentTracker.getRefreshSeqNoLag());
-        assertEquals(0, segmentTracker.getTimeMsLag());
-        assertEquals(0, segmentTracker.getTotalUploadsFailed());
+        assertNoLagAndTotalUploadsFailed(segmentTracker, 0);
     }
 
     public void testRefreshSuccessOnSecondAttempt() throws Exception {
@@ -273,10 +277,7 @@ public class RemoteStoreRefreshListenerTests extends IndexShardTestCase {
         assertBusy(() -> assertEquals(0, successLatch.getCount()));
         RemoteRefreshSegmentPressureService pressureService = tuple.v2();
         RemoteRefreshSegmentTracker segmentTracker = pressureService.getRemoteRefreshSegmentTracker(indexShard.shardId());
-        assertEquals(0, segmentTracker.getBytesLag());
-        assertEquals(0, segmentTracker.getRefreshSeqNoLag());
-        assertEquals(0, segmentTracker.getTimeMsLag());
-        assertEquals(1, segmentTracker.getTotalUploadsFailed());
+        assertNoLagAndTotalUploadsFailed(segmentTracker, 1);
     }
 
     /**
@@ -304,7 +305,7 @@ public class RemoteStoreRefreshListenerTests extends IndexShardTestCase {
         assertBusy(() -> assertEquals(0, reachedCheckpointPublishLatch.getCount()));
     }
 
-    public void testRefreshSuccessOnThirdAttemptAttempt() throws Exception {
+    public void testRefreshSuccessOnThirdAttempt() throws Exception {
         // This covers 3 cases - 1) isRetry=false, shouldRetry=true 2) isRetry=true, shouldRetry=false 3) isRetry=True, shouldRetry=true
         // Succeed on 3rd attempt
         int succeedOnAttempt = 3;
@@ -322,11 +323,16 @@ public class RemoteStoreRefreshListenerTests extends IndexShardTestCase {
         assertBusy(() -> assertEquals(0, successLatch.getCount()));
         RemoteRefreshSegmentPressureService pressureService = tuple.v2();
         RemoteRefreshSegmentTracker segmentTracker = pressureService.getRemoteRefreshSegmentTracker(indexShard.shardId());
-        assertEquals(0, segmentTracker.getBytesLag());
-        assertEquals(0, segmentTracker.getRefreshSeqNoLag());
-        assertEquals(0, segmentTracker.getTimeMsLag());
-        assertEquals(2, segmentTracker.getTotalUploadsFailed());
+        assertNoLagAndTotalUploadsFailed(segmentTracker, 2);
+    }
 
+    private void assertNoLagAndTotalUploadsFailed(RemoteRefreshSegmentTracker segmentTracker, long totalUploadsFailed) throws Exception {
+        assertBusy(() -> {
+            assertEquals(0, segmentTracker.getBytesLag());
+            assertEquals(0, segmentTracker.getRefreshSeqNoLag());
+            assertEquals(0, segmentTracker.getTimeMsLag());
+            assertEquals(totalUploadsFailed, segmentTracker.getTotalUploadsFailed());
+        });
     }
 
     public void testTrackerData() throws Exception {
@@ -382,6 +388,8 @@ public class RemoteStoreRefreshListenerTests extends IndexShardTestCase {
             true,
             Settings.builder()
                 .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
+                .put(IndexMetadata.SETTING_REMOTE_SEGMENT_STORE_REPOSITORY, "temp-fs")
+                .put(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY, "temp-fs")
                 .put(SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
                 .build(),
             new InternalEngineFactory()

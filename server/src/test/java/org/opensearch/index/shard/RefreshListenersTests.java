@@ -36,14 +36,15 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.StoredFields;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.store.Directory;
 import org.opensearch.Version;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.UUIDs;
-import org.opensearch.common.bytes.BytesArray;
-import org.opensearch.common.bytes.BytesReference;
+import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.common.lucene.uid.Versions;
 import org.opensearch.common.metrics.MeanMetric;
 import org.opensearch.common.settings.Settings;
@@ -53,7 +54,8 @@ import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.common.lease.Releasable;
-import org.opensearch.index.Index;
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.core.index.Index;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.codec.CodecService;
 import org.opensearch.index.engine.Engine;
@@ -69,7 +71,7 @@ import org.opensearch.index.seqno.SequenceNumbers;
 import org.opensearch.index.store.Store;
 import org.opensearch.index.translog.Translog;
 import org.opensearch.index.translog.TranslogConfig;
-import org.opensearch.indices.breaker.NoneCircuitBreakerService;
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
 import org.opensearch.test.DummyShardLock;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.test.IndexSettingsModule;
@@ -155,7 +157,7 @@ public class RefreshListenersTests extends OpenSearchTestCase {
             .mergePolicy(newMergePolicy())
             .analyzer(iwc.getAnalyzer())
             .similarity(iwc.getSimilarity())
-            .codecService(new CodecService(null, logger))
+            .codecService(new CodecService(null, indexSettings, logger))
             .eventListener(eventListener)
             .queryCache(IndexSearcher.getDefaultQueryCache())
             .queryCachingPolicy(IndexSearcher.getDefaultQueryCachingPolicy())
@@ -368,9 +370,8 @@ public class RefreshListenersTests extends OpenSearchTestCase {
                         try (Engine.GetResult getResult = engine.get(get, engine::acquireSearcher)) {
                             assertTrue("document not found", getResult.exists());
                             assertEquals(iteration, getResult.version());
-                            org.apache.lucene.document.Document document = getResult.docIdAndVersion().reader.document(
-                                getResult.docIdAndVersion().docId
-                            );
+                            StoredFields storedFields = getResult.docIdAndVersion().reader.storedFields();
+                            org.apache.lucene.document.Document document = storedFields.document(getResult.docIdAndVersion().docId);
                             assertThat(document.getValues("test"), arrayContaining(testFieldValue));
                         }
                     } catch (Exception t) {

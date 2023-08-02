@@ -36,8 +36,8 @@ public class SegmentReplicationUsingRemoteStoreIT extends SegmentReplicationIT {
         return Settings.builder()
             .put(super.indexSettings())
             .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
-            .put(IndexMetadata.SETTING_REMOTE_STORE_REPOSITORY, REPOSITORY_NAME)
-            .put(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_ENABLED, false)
+            .put(IndexMetadata.SETTING_REMOTE_SEGMENT_STORE_REPOSITORY, REPOSITORY_NAME)
+            .put(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY, REPOSITORY_NAME)
             .build();
     }
 
@@ -64,7 +64,6 @@ public class SegmentReplicationUsingRemoteStoreIT extends SegmentReplicationIT {
         assertAcked(clusterAdmin().prepareDeleteRepository(REPOSITORY_NAME));
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/7592")
     @Override
     public void testPressureServiceStats() throws Exception {
         super.testPressureServiceStats();

@@ -31,7 +31,6 @@
 
 package org.opensearch.search;
 
-import com.carrotsearch.hppc.IntArrayList;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.FilterDirectoryReader;
 import org.apache.lucene.index.LeafReader;
@@ -56,8 +55,8 @@ import org.opensearch.action.support.IndicesOptions;
 import org.opensearch.action.support.PlainActionFuture;
 import org.opensearch.action.support.WriteRequest;
 import org.opensearch.common.UUIDs;
-import org.opensearch.common.io.stream.StreamInput;
-import org.opensearch.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.settings.SettingsException;
 import org.opensearch.common.unit.TimeValue;
@@ -65,7 +64,7 @@ import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.Index;
+import org.opensearch.core.index.Index;
 import org.opensearch.index.IndexModule;
 import org.opensearch.index.IndexNotFoundException;
 import org.opensearch.index.IndexService;
@@ -81,12 +80,12 @@ import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.search.stats.SearchStats;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.SearchOperationListener;
-import org.opensearch.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.settings.InternalOrPrivateSettingsPlugin;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.plugins.SearchPlugin;
-import org.opensearch.rest.RestStatus;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.script.MockScriptEngine;
 import org.opensearch.script.MockScriptPlugin;
 import org.opensearch.script.Script;
@@ -360,7 +359,7 @@ public class SearchServiceTests extends OpenSearchSingleNodeTestCase {
                             result
                         );
                         SearchPhaseResult searchPhaseResult = result.get();
-                        IntArrayList intCursors = new IntArrayList(1);
+                        List<Integer> intCursors = new ArrayList(1);
                         intCursors.add(0);
                         ShardFetchRequest req = new ShardFetchRequest(searchPhaseResult.getContextId(), intCursors, null/* not a scroll */);
                         PlainActionFuture<FetchSearchResult> listener = new PlainActionFuture<>();
@@ -1746,6 +1745,23 @@ public class SearchServiceTests extends OpenSearchSingleNodeTestCase {
         MinAndMax<?> minMax = new MinAndMax<Long>(0L, 9L);
         FieldSortBuilder primarySort = new FieldSortBuilder("test");
         primarySort.order(SortOrder.DESC);
+        assertEquals(SearchService.canMatchSearchAfter(searchAfter, minMax, primarySort), true);
+    }
+
+    /**
+     * Test canMatchSearchAfter with missing value, even if min/max is out of range
+     * Min = 0L, Max = 9L, search_after = -1L
+     * Expected result is canMatch = true
+     */
+    public void testCanMatchSearchAfterWithMissing() throws IOException {
+        FieldDoc searchAfter = new FieldDoc(0, 0, new Long[] { -1L });
+        MinAndMax<?> minMax = new MinAndMax<Long>(0L, 9L);
+        FieldSortBuilder primarySort = new FieldSortBuilder("test");
+        primarySort.order(SortOrder.DESC);
+        // Should be false without missing values
+        assertEquals(SearchService.canMatchSearchAfter(searchAfter, minMax, primarySort), false);
+        primarySort.missing("_last");
+        // Should be true with missing values
         assertEquals(SearchService.canMatchSearchAfter(searchAfter, minMax, primarySort), true);
     }
 }

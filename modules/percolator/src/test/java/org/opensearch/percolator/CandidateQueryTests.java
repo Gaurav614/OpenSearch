@@ -95,8 +95,8 @@ import org.opensearch.Version;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.CheckedFunction;
 import org.opensearch.common.Strings;
-import org.opensearch.common.bytes.BytesArray;
-import org.opensearch.common.bytes.BytesReference;
+import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.lucene.search.function.FunctionScoreQuery;
 import org.opensearch.common.geo.ShapeRelation;
@@ -1275,7 +1275,7 @@ public class CandidateQueryTests extends OpenSearchSingleNodeTestCase {
         }
 
         @Override
-        public Query rewrite(IndexReader reader) throws IOException {
+        public Query rewrite(IndexSearcher searcher) throws IOException {
             return new TermQuery(term);
         }
 

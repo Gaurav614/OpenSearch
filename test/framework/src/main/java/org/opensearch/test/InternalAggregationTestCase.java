@@ -33,9 +33,9 @@
 package org.opensearch.test;
 
 import org.opensearch.common.SetOnce;
-import org.opensearch.common.breaker.CircuitBreaker;
-import org.opensearch.common.bytes.BytesReference;
-import org.opensearch.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.core.common.breaker.CircuitBreaker;
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.common.util.MockBigArrays;
@@ -45,9 +45,9 @@ import org.opensearch.core.xcontent.ContextParser;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.common.xcontent.XContentParserUtils;
+import org.opensearch.core.xcontent.XContentParserUtils;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.indices.breaker.NoneCircuitBreakerService;
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.rest.action.search.RestSearchAction;

@@ -11,13 +11,13 @@ package org.opensearch.extensions.settings;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import org.opensearch.common.bytes.BytesReference;
-import org.opensearch.common.io.stream.BytesStreamInput;
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.io.stream.BytesStreamInput;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.unit.ByteSizeUnit;
-import org.opensearch.common.unit.ByteSizeValue;
+import org.opensearch.core.common.unit.ByteSizeUnit;
+import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.test.OpenSearchTestCase;
 

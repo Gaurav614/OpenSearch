@@ -54,7 +54,7 @@ import org.apache.lucene.search.TopTermsRewrite;
 import org.apache.lucene.store.Directory;
 import org.opensearch.common.Strings;
 import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.common.lucene.search.SpanBooleanQueryRewriteWithMaxClause;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.mapper.MapperService;
@@ -284,8 +284,9 @@ public class SpanMultiTermQueryBuilderTests extends AbstractQueryTestCase<SpanMu
                     BooleanQuery.setMaxClauseCount(1);
                     try {
                         QueryBuilder queryBuilder = new SpanMultiTermQueryBuilder(QueryBuilders.prefixQuery("body", "bar"));
-                        Query query = queryBuilder.toQuery(createShardContext(new IndexSearcher(reader)));
-                        RuntimeException exc = expectThrows(RuntimeException.class, () -> query.rewrite(reader));
+                        IndexSearcher searcher = new IndexSearcher(reader);
+                        Query query = queryBuilder.toQuery(createShardContext(searcher));
+                        RuntimeException exc = expectThrows(RuntimeException.class, () -> query.rewrite(searcher));
                         assertThat(exc.getMessage(), containsString("maxClauseCount"));
                     } finally {
                         BooleanQuery.setMaxClauseCount(origBoolMaxClauseCount);

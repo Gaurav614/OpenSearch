@@ -41,14 +41,15 @@ import org.apache.lucene.util.Constants;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.core.ParseField;
 import org.opensearch.common.Strings;
-import org.opensearch.common.bytes.BytesArray;
-import org.opensearch.common.bytes.BytesReference;
+import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.common.geo.GeoPoint;
 import org.opensearch.common.io.PathUtils;
-import org.opensearch.common.text.Text;
+import org.opensearch.core.common.text.Text;
 import org.opensearch.common.unit.DistanceUnit;
 import org.opensearch.common.util.CollectionUtils;
 import org.opensearch.core.xcontent.DeprecationHandler;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.NamedObjectNotFoundException;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
@@ -865,7 +866,7 @@ public abstract class BaseXContentTestCase extends OpenSearchTestCase {
             generator.writeEndObject();
         }
         byte[] data = os.toByteArray();
-        assertEquals(xcontentType(), XContentFactory.xContentType(data));
+        assertEquals(xcontentType(), MediaTypeRegistry.xContent(data));
     }
 
     public void testMissingEndObject() throws IOException {

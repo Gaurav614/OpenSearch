@@ -49,7 +49,7 @@ import org.opensearch.common.CheckedRunnable;
 import org.opensearch.common.StopWatch;
 import org.opensearch.common.concurrent.GatedCloseable;
 import org.opensearch.common.logging.Loggers;
-import org.opensearch.common.unit.ByteSizeValue;
+import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.CancellableThreads;
 import org.opensearch.common.util.concurrent.FutureUtils;
@@ -835,7 +835,7 @@ public abstract class RecoverySourceHandler {
             } else {
                 // Force round of segment replication to update its checkpoint to primary's
                 if (shard.indexSettings().isSegRepEnabled()) {
-                    recoveryTarget.forceSegmentFileSync();
+                    cancellableThreads.execute(recoveryTarget::forceSegmentFileSync);
                 }
             }
             stopWatch.stop();

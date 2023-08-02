@@ -35,7 +35,7 @@ package org.opensearch.common;
 import org.apache.lucene.util.BytesRefBuilder;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchException;
-import org.opensearch.common.bytes.BytesReference;
+import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.common.util.CollectionUtils;
 import org.opensearch.core.xcontent.MediaType;
 import org.opensearch.core.xcontent.ToXContent;
@@ -153,29 +153,6 @@ public class Strings {
         String beforeDelimiter = toSplit.substring(0, offset);
         String afterDelimiter = toSplit.substring(offset + delimiter.length());
         return new String[] { beforeDelimiter, afterDelimiter };
-    }
-
-    /**
-     * Format the double value with a single decimal points, trimming trailing '.0'.
-     */
-    public static String format1Decimals(double value, String suffix) {
-        String p = String.valueOf(value);
-        int ix = p.indexOf('.') + 1;
-        int ex = p.indexOf('E');
-        char fraction = p.charAt(ix);
-        if (fraction == '0') {
-            if (ex != -1) {
-                return p.substring(0, ix - 1) + p.substring(ex) + suffix;
-            } else {
-                return p.substring(0, ix - 1) + suffix;
-            }
-        } else {
-            if (ex != -1) {
-                return p.substring(0, ix) + fraction + p.substring(ex) + suffix;
-            } else {
-                return p.substring(0, ix) + fraction + suffix;
-            }
-        }
     }
 
     private Strings() {}

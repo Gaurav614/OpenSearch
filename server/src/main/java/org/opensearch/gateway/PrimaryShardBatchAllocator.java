@@ -172,7 +172,7 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
     /**
      * Below code is very similar to {@link org.opensearch.gateway.PrimaryShardAllocator} class makeAllocationDecision,
      * only difference is that NodeGatewayStartedShards object doesn't have the DiscoveryNode object as
-     * BaseNodeResponse. So, DiscoveryNode reference is passed in Map<DiscoveryNode, NodeGatewayStartedShards> so
+     * BaseNodeResponse. So, DiscoveryNode reference is passed in Map&lt;DiscoveryNode, NodeGatewayStartedShards&gt; so
      * corresponding DiscoveryNode object can be used for rest of the implementation. Also, DiscoveryNode object
      * reference is added in DecidedNode class to achieve same use case of accessing corresponding DiscoveryNode object.
      * @param unassignedShard unassigned shard routing

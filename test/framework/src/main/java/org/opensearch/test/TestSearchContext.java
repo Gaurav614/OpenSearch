@@ -48,10 +48,11 @@ import org.opensearch.index.mapper.ObjectMapper;
 import org.opensearch.index.query.ParsedQuery;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.similarity.SimilarityService;
 import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.SearchShardTarget;
+import org.opensearch.search.aggregations.BucketCollectorProcessor;
 import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.search.aggregations.SearchContextAggregations;
 import org.opensearch.search.collapse.CollapseContext;
@@ -116,6 +117,7 @@ public class TestSearchContext extends SearchContext {
     private Profilers profilers;
     private CollapseContext collapse;
     protected boolean concurrentSegmentSearchEnabled;
+    private BucketCollectorProcessor bucketCollectorProcessor = NO_OP_BUCKET_COLLECTOR_PROCESSOR;
 
     /**
      * Sets the concurrent segment search enabled field
@@ -158,6 +160,7 @@ public class TestSearchContext extends SearchContext {
         this.indexShard = indexShard;
         this.queryShardContext = queryShardContext;
         this.searcher = searcher;
+        this.concurrentSegmentSearchEnabled = searcher != null && (searcher.getExecutor() != null);
         this.scrollContext = scrollContext;
     }
 
@@ -657,8 +660,18 @@ public class TestSearchContext extends SearchContext {
     }
 
     @Override
-    public InternalAggregation.ReduceContext partial() {
+    public InternalAggregation.ReduceContext partialOnShard() {
         return InternalAggregationTestCase.emptyReduceContextBuilder().forPartialReduction();
+    }
+
+    @Override
+    public void setBucketCollectorProcessor(BucketCollectorProcessor bucketCollectorProcessor) {
+        this.bucketCollectorProcessor = bucketCollectorProcessor;
+    }
+
+    @Override
+    public BucketCollectorProcessor bucketCollectorProcessor() {
+        return bucketCollectorProcessor;
     }
 
     /**
@@ -674,7 +687,7 @@ public class TestSearchContext extends SearchContext {
      * Add profilers to the query
      */
     public TestSearchContext withProfilers() {
-        this.profilers = new Profilers(searcher);
+        this.profilers = new Profilers(searcher, concurrentSegmentSearchEnabled);
         return this;
     }
 }

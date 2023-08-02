@@ -8,11 +8,13 @@
 
 package org.opensearch.telemetry.tracing.noop;
 
-import org.opensearch.telemetry.tracing.Scope;
+import org.opensearch.telemetry.tracing.SpanScope;
 import org.opensearch.telemetry.tracing.Tracer;
 
 /**
  * No-op implementation of Tracer
+ *
+ * @opensearch.internal
  */
 public class NoopTracer implements Tracer {
 
@@ -24,49 +26,8 @@ public class NoopTracer implements Tracer {
     private NoopTracer() {}
 
     @Override
-    public Scope startSpan(String spanName) {
-        return Scope.NO_OP;
-    }
-
-    /**
-     * @param key   attribute key
-     * @param value attribute value
-     */
-    @Override
-    public void addSpanAttribute(String key, String value) {
-
-    }
-
-    /**
-     * @param key   attribute key
-     * @param value attribute value
-     */
-    @Override
-    public void addSpanAttribute(String key, long value) {
-
-    }
-
-    /**
-     * @param key   attribute key
-     * @param value attribute value
-     */
-    @Override
-    public void addSpanAttribute(String key, double value) {
-
-    }
-
-    /**
-     * @param key   attribute key
-     * @param value attribute value
-     */
-    @Override
-    public void addSpanAttribute(String key, boolean value) {
-
-    }
-
-    @Override
-    public void addSpanEvent(String event) {
-
+    public SpanScope startSpan(String spanName) {
+        return SpanScope.NO_OP;
     }
 
     @Override

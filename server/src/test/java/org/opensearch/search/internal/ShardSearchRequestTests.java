@@ -44,6 +44,7 @@ import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.xcontent.DeprecationHandler;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -51,7 +52,7 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.RandomQueryBuilder;
-import org.opensearch.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.indices.InvalidAliasNameException;
 import org.opensearch.search.AbstractSearchTestCase;
 import org.opensearch.search.SearchSortValuesAndFormatsTests;
@@ -220,7 +221,7 @@ public class ShardSearchRequestTests extends AbstractSearchTestCase {
         return ShardSearchRequest.parseAliasFilter(bytes -> {
             try (
                 InputStream inputStream = bytes.streamInput();
-                XContentParser parser = XContentFactory.xContentType(inputStream)
+                XContentParser parser = MediaTypeRegistry.xContentType(inputStream)
                     .xContent()
                     .createParser(xContentRegistry(), DeprecationHandler.THROW_UNSUPPORTED_OPERATION, inputStream)
             ) {

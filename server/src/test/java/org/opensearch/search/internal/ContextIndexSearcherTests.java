@@ -40,7 +40,6 @@ import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.FilterDirectoryReader;
-import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReader;
@@ -80,7 +79,8 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.cache.bitset.BitsetFilterCache;
-import org.opensearch.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.index.shard.IndexShard;
 import org.opensearch.search.aggregations.LeafBucketCollector;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.test.IndexSettingsModule;
@@ -91,6 +91,8 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.opensearch.search.internal.ContextIndexSearcher.intersectScorerAndBitSet;
 import static org.opensearch.search.internal.ExitableDirectoryReader.ExitableLeafReader;
 import static org.opensearch.search.internal.ExitableDirectoryReader.ExitablePointValues;
@@ -253,13 +255,18 @@ public class ContextIndexSearcherTests extends OpenSearchTestCase {
 
         DocumentSubsetDirectoryReader filteredReader = new DocumentSubsetDirectoryReader(reader, cache, roleQuery);
 
+        SearchContext searchContext = mock(SearchContext.class);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(searchContext.indexShard()).thenReturn(indexShard);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         ContextIndexSearcher searcher = new ContextIndexSearcher(
             filteredReader,
             IndexSearcher.getDefaultSimilarity(),
             IndexSearcher.getDefaultQueryCache(),
             IndexSearcher.getDefaultQueryCachingPolicy(),
             true,
-            null
+            null,
+            searchContext
         );
 
         for (LeafReaderContext context : searcher.getIndexReader().leaves()) {
@@ -458,12 +465,12 @@ public class ContextIndexSearcherTests extends OpenSearchTestCase {
         }
 
         @Override
-        public Query rewrite(IndexReader reader) throws IOException {
-            Query queryRewritten = query.rewrite(reader);
+        public Query rewrite(IndexSearcher searcher) throws IOException {
+            Query queryRewritten = query.rewrite(searcher);
             if (query != queryRewritten) {
                 return new CreateScorerOnceQuery(queryRewritten);
             }
-            return super.rewrite(reader);
+            return super.rewrite(searcher);
         }
 
         @Override
