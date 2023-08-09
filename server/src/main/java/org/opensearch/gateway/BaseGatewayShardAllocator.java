@@ -87,17 +87,26 @@ public abstract class BaseGatewayShardAllocator {
         // make Allocation Decisions for all shards
         HashMap<ShardRouting, AllocateUnassignedDecision> decisionMap = makeAllocationDecision(shards,
             allocation, logger);
+        assert shards.size() == decisionMap.size() : "make allocation decision didn't return allocation decision for " +
+            "some shards";
         // get all unassigned shards
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = allocation.routingNodes().unassigned().iterator();
+
         while (iterator.hasNext()) {
             ShardRouting shard = iterator.next();
-            if (shards.stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId())).count() == 1) {
-                List<ShardRouting> matchedShardRouting =
-                    decisionMap.keySet().stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId())).collect(Collectors.toList());
-                executeDecision(shard,
-                    decisionMap.get(matchedShardRouting.get(0)),
-                    allocation,
-                    iterator);
+            try {
+                if (shards.stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId()) &&
+                    shardRouting.primary() == shard.primary()).count() == 1) {
+                    List<ShardRouting> matchedShardRouting =
+                        decisionMap.keySet().stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId())
+                            && shardRouting.primary() == shard.primary()).collect(Collectors.toList());
+                    executeDecision(shard,
+                        decisionMap.get(matchedShardRouting.get(0)),
+                        allocation,
+                        iterator);
+                }
+            } catch (Exception e) {
+                logger.error("failed to execute decision for shard {} ", shard, e);
             }
         }
     }

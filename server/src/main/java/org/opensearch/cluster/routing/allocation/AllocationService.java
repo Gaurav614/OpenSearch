@@ -35,6 +35,7 @@ package org.opensearch.cluster.routing.allocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.opensearch.Version;
 import org.opensearch.cluster.ClusterInfoService;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.RestoreInProgress;
@@ -548,8 +549,7 @@ public class AllocationService {
             existingShardsAllocator.beforeAllocation(allocation);
         }
         // batch Mode enabled setting to be added
-        boolean batchModeEnabled = true;
-        // ToDo: Add logic
+        boolean batchModeEnabled = allocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT);
         if (batchModeEnabled) {
             // since allocators is per index setting, to have batch assignment verify allocators same for all shards
             // if not fallback to single assignment
