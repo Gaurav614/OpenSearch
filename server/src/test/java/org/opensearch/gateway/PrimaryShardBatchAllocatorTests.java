@@ -54,6 +54,8 @@ import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.routing.ShardRoutingState;
 import org.opensearch.cluster.routing.UnassignedInfo;
 import org.opensearch.cluster.routing.UnassignedInfo.AllocationStatus;
+import org.opensearch.cluster.routing.allocation.AllocateUnassignedDecision;
+import org.opensearch.cluster.routing.allocation.AllocationDecision;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.cluster.routing.allocation.decider.AllocationDecider;
 import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;
@@ -62,14 +64,17 @@ import org.opensearch.common.Nullable;
 import org.opensearch.common.UUIDs;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.set.Sets;
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.env.Environment;
 import org.opensearch.env.ShardLockObtainFailedException;
+import org.opensearch.index.IndexSettings;
 import org.opensearch.index.codec.CodecService;
-import org.opensearch.index.shard.ShardId;
 import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
 import org.opensearch.repositories.IndexId;
 import org.opensearch.snapshots.Snapshot;
 import org.opensearch.snapshots.SnapshotId;
 import org.opensearch.snapshots.SnapshotShardSizeInfo;
+import org.opensearch.test.IndexSettingsModule;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -702,6 +707,47 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
         assertClusterHealthStatus(allocation, ClusterHealthStatus.YELLOW);
     }
 
+    public void testMakeAllocationDecisionDataFetching(){
+        final RoutingAllocation allocation = routingAllocationWithOnePrimaryNoReplicas(
+            noAllocationDeciders(),
+            CLUSTER_RECOVERED,
+            "allocId1"
+        );
+
+        Set<ShardRouting> shards = new HashSet<>();
+        allocateAllUnassignedBatch(allocation);
+        ShardRouting shard =
+            allocation.routingTable().getIndicesRouting().get("test").shard(shardId.id()).primaryShard();
+        shards.add(shard);
+        HashMap<ShardRouting, AllocateUnassignedDecision> allDecisions = batchAllocator.makeAllocationDecision(shards,
+            allocation, logger);
+        // verify we get decisions for all the shards
+        assertEquals(shards.size(), allDecisions.size());
+        assertEquals(shards, allDecisions.keySet());
+        assertEquals(AllocationDecision.AWAITING_INFO, allDecisions.get(shard).getAllocationDecision());
+    }
+
+    public void testMakeAllocationDecisionDataFetched(){
+        final RoutingAllocation allocation = routingAllocationWithOnePrimaryNoReplicas(
+            noAllocationDeciders(),
+            CLUSTER_RECOVERED,
+            "allocId1"
+        );
+
+        Set<ShardRouting> shards = new HashSet<>();
+        ShardRouting shard =
+            allocation.routingTable().getIndicesRouting().get("test").shard(shardId.id()).primaryShard();
+        shards.add(shard);
+        batchAllocator.addData(node1, "allocId1", true, new ReplicationCheckpoint(shardId, 20, 101, 1,
+            Codec.getDefault().getName()));
+        HashMap<ShardRouting, AllocateUnassignedDecision> allDecisions = batchAllocator.makeAllocationDecision(shards,
+            allocation, logger);
+        // verify we get decisions for all the shards
+        assertEquals(shards.size(), allDecisions.size());
+        assertEquals(shards, allDecisions.keySet());
+        assertEquals(AllocationDecision.YES, allDecisions.get(shard).getAllocationDecision());
+    }
+
     private RoutingAllocation getRestoreRoutingAllocation(AllocationDeciders allocationDeciders, Long shardSize, String... allocIds) {
         Metadata metadata = Metadata.builder()
             .put(
@@ -863,21 +909,26 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
         }
 
         public TestBatchAllocator addData(DiscoveryNode node, String allocationId, boolean primary) {
+            Settings nodeSettings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir()).build();
+            IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test", nodeSettings);
             return addData(
                 node,
                 allocationId,
                 primary,
-                ReplicationCheckpoint.empty(shardId, new CodecService(null, null).codec("default").getName()),
+                ReplicationCheckpoint.empty(shardId,
+                    new CodecService(null, indexSettings, null).codec("default").getName()),
                 null
             );
         }
 
         public TestBatchAllocator addData(DiscoveryNode node, String allocationId, boolean primary, @Nullable Exception storeException) {
+            Settings nodeSettings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir()).build();
+            IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test", nodeSettings);
             return addData(
                 node,
                 allocationId,
                 primary,
-                ReplicationCheckpoint.empty(shardId, new CodecService(null, null).codec("default").getName()),
+                ReplicationCheckpoint.empty(shardId, new CodecService(null, indexSettings, null).codec("default").getName()),
                 storeException
             );
         }
