@@ -105,9 +105,6 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         ConcurrentCollections.newConcurrentMap();
     private Set<String> lastSeenEphemeralIds = Collections.emptySet();
     private final ConcurrentMap<ShardId, String> startedShardBatchLookup = ConcurrentCollections.newConcurrentMap();
-    // These maps are used just for checking if the shard is batched or not in a concurrent manner
-    private final ConcurrentMap<ShardId, Boolean> startedShardLookup = ConcurrentCollections.newConcurrentMap();
-    private final ConcurrentMap<ShardId, Boolean> storeShardLookup = ConcurrentCollections.newConcurrentMap();
     private final ConcurrentMap<String, ShardsBatch> batchIdToStartedShardBatch = ConcurrentCollections.newConcurrentMap();
     private final ConcurrentMap<ShardId, String> storeShardBatchLookup = ConcurrentCollections.newConcurrentMap();
     private final ConcurrentMap<String, ShardsBatch> batchIdToStoreShardBatch = ConcurrentCollections.newConcurrentMap();
@@ -150,8 +147,6 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         batchIdToStoreShardBatch.clear();
         startedShardBatchLookup.clear();
         storeShardBatchLookup.clear();
-        startedShardLookup.clear();
-        storeShardLookup.clear();
     }
 
     // for tests
@@ -254,19 +249,14 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     private void createBatches(RoutingAllocation allocation, boolean primary) {
         RoutingNodes.UnassignedShards unassigned = allocation.routingNodes().unassigned();
         // fetch all current batched shards
-        ConcurrentMap<ShardId, Boolean> currentBatchedShards = primary ? startedShardLookup : storeShardLookup;
+        Set<ShardId> currentBatchedShards = primary? startedShardBatchLookup.keySet() : storeShardBatchLookup.keySet();
         Set<ShardRouting> shardsToBatch = Sets.newHashSet();
         // add all unassigned shards to the batch if they are not already in a batch
         unassigned.forEach(shardRouting -> {
-            currentBatchedShards.computeIfAbsent(shardRouting.shardId(), shardId -> {
-                if (shardRouting.primary() == primary) {
-                    assert shardRouting.unassigned();
-                    shardsToBatch.add(shardRouting);
-                    return true;
-                } else {
-                    return null;
-                }
-            });
+            if ((currentBatchedShards.contains(shardRouting.shardId()) == false) && (shardRouting.primary() == primary)) {
+                assert shardRouting.unassigned();
+                shardsToBatch.add(shardRouting);
+            }
         });
         // below code will only run for the shards which truly needs batching, and one shard won't go in different
         // batches
@@ -731,10 +721,8 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             // remove from lookup
             if (this.primary) {
                 startedShardBatchLookup.remove(shard.shardId());
-                startedShardLookup.remove(shard.shardId());
             } else {
                 storeShardBatchLookup.remove(shard.shardId());
-                storeShardLookup.remove(shard.shardId());
             }
             // assert that fetcher and shards are the same as batched shards
             assert batchInfo.size() == asyncBatch.shardsToCustomDataPathMap.size() : "Shards size is not equal to fetcher size";
