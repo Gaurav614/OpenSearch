@@ -634,14 +634,12 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             }
             if (batchId == null) {
                 logger.debug("Shard {} has no batch id", shardRouting);
-//                throw new IllegalStateException("Shard " + shardRouting + " has no batch id. Shard should batched before fetching");
-                return new AsyncBatchShardFetch.FetchResult<>(null, Collections.emptyMap());
+                throw new IllegalStateException("Shard " + shardRouting + " has no batch id. Shard should batched before fetching");
             }
 
             if (batchIdToStoreShardBatch.containsKey(batchId) == false) {
                 logger.debug("Batch {} has no store shard batch", batchId);
-//                throw new IllegalStateException("Batch " + batchId + " has no shard store batch");
-                return new AsyncBatchShardFetch.FetchResult<>(null, Collections.emptyMap());
+                throw new IllegalStateException("Batch " + batchId + " has no shard store batch");
             }
 
             ShardsBatch shardsBatch = batchIdToStoreShardBatch.get(batchId);
@@ -668,13 +666,9 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         }
 
         @Override
-        protected AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata> fetchData(ShardRouting shard, RoutingAllocation allocation) {
-            return null;
-        }
-
-        @Override
         protected boolean hasInitiatedFetching(ShardRouting shard) {
-            return storeShardBatchLookup.containsKey(shard.shardId());
+            String batchId = storeShardBatchLookup.getOrDefault(shard.shardId(), null);
+            return batchIdToStoreShardBatch.containsKey(batchId);
         }
     }
 
