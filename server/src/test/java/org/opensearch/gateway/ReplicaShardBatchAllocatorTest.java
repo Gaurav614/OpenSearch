@@ -333,11 +333,6 @@ public class ReplicaShardBatchAllocatorTest extends OpenSearchAllocationTestCase
         }
 
         @Override
-        protected AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata> fetchData(ShardRouting shard, RoutingAllocation allocation) {
-            return null;
-        }
-
-        @Override
         protected boolean hasInitiatedFetching(ShardRouting shard) {
             return fetchDataCalled.get();
         }
