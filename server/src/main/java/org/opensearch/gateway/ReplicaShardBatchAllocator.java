@@ -25,7 +25,6 @@ import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.gateway.AsyncBatchShardFetch.FetchResult;
 import org.opensearch.index.store.StoreFileMetadata;
-import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch;
 
@@ -55,21 +54,17 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
             Set<ShardRouting> ineligibleShards = new HashSet<>();
             for (ShardRouting shard : shardBatch) {
                 if (shard.primary()) {
-//                    ineligibleShards.add(shard);
                     continue;
                 }
                 if (shard.initializing() == false) {
-//                    ineligibleShards.add(shard);
                     continue;
                 }
                 if (shard.relocatingNodeId() != null) {
-//                    ineligibleShards.add(shard);
                     continue;
                 }
 
                 // if we are allocating a replica because of index creation, no need to go and find a copy, there isn't one...
                 if (shard.unassignedInfo() != null && shard.unassignedInfo().getReason() == UnassignedInfo.Reason.INDEX_CREATED) {
-                    //ineligibleShards.add(shard);
                     continue;
                 }
                 eligibleFetchShards.add(shard);
@@ -180,7 +175,6 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
                 // only return early if we are not in explain mode, or we are in explain mode but we have not
                 // yet attempted to fetch any shard data
                 logger.trace("{}: ignoring allocation, can't be allocated on any node", shard);
-//                shardsNotEligibleForFetch.add(shard);
                 shardAllocationDecisions.put(shard,
                     AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.fromDecision(allocationDecision.type()),
                         result.v2() != null ? new ArrayList<>(result.v2().values()) : null));
@@ -188,7 +182,6 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
             }
             // storing the nodeDecisions in nodeAllocationDecisions if the decision is not YES
             // so that we don't have to compute the decisions again
-            // ToDo: Check if we need to store or computing again will be cheaper/better
             nodeAllocationDecisions.put(shard, result);
 
             shardsEligibleForFetch.add(shard);
@@ -196,15 +189,6 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
 
         // only fetch data for eligible shards
         final FetchResult<NodeStoreFilesMetadataBatch> shardsState = fetchData(shardsEligibleForFetch, shardsNotEligibleForFetch, allocation);
-
-        // ToDo: Analyze if we need to create hashmaps here or sequential is better
-//        Map<ShardRouting, DiscoveryNode> primaryNodesMap = shardsEligibleForFetch.stream()
-//            .map(x -> routingNodes.activePrimary(x.shardId()))
-//            .filter(Objects::nonNull)
-//            .filter(node -> node.currentNodeId() != null)
-//            .collect(Collectors.toMap(Function.identity(), node -> allocation.nodes().get(node.currentNodeId())));
-//
-//        Map<ShardRouting, NodeStoreFilesMetadata> primaryStoreMap = findStoresBatch(primaryNodesMap, shardsState);
 
         for (ShardRouting unassignedShard : shardsEligibleForFetch) {
             if (!shardsState.hasData()) {
@@ -272,7 +256,6 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
                     );
                     // we are throttling this, as we have enough other shards to allocate to this node, so ignore it for now
                     shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.throttle(nodeDecisions));
-                    continue;
                 } else {
                     logger.debug(
                         "[{}][{}]: allocating [{}] to [{}] in order to reuse its unallocated persistent store",
@@ -283,8 +266,8 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
                     );
                     // we found a match
                     shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.yes(nodeWithHighestMatch.node(), null, nodeDecisions, true));
-                    continue;
                 }
+                continue;
             } else if (matchingNodes.hasAnyData() == false && unassignedShard.unassignedInfo().isDelayed()) {
                 // if we didn't manage to find *any* data (regardless of matching sizes), and the replica is
                 // unassigned due to a node leaving, so we delay allocation of this replica to see if the
@@ -457,23 +440,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
         return Tuple.tuple(madeDecision, nodeDecisions);
     }
 
-    protected abstract AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata> fetchData(ShardRouting shard, RoutingAllocation allocation);
-
     protected abstract boolean hasInitiatedFetching(ShardRouting shard);
-
-//    private static Map<ShardRouting, NodeStoreFilesMetadata> findStoresBatch(Map<ShardRouting, DiscoveryNode> shardToNodeMap,
-//                                                                                              FetchResult<NodeStoreFilesMetadataBatch> data) {
-//        Map<ShardRouting, NodeStoreFilesMetadata> shardStores = new HashMap<>();
-//        shardToNodeMap.entrySet().forEach(entry -> {
-//            NodeStoreFilesMetadataBatch nodeFilesStore = data.getData().get(entry.getValue());
-//            if (nodeFilesStore == null) {
-//                shardStores.put(entry.getKey(), null);
-//            } else {
-//                shardStores.put(entry.getKey(), nodeFilesStore.getNodeStoreFilesMetadataBatch().get(entry.getKey().shardId()));
-//            }
-//        });
-//        return shardStores;
-//    }
 
     private static TransportNodesListShardStoreMetadataBatch.StoreFilesMetadata findStore(
         DiscoveryNode node,
