@@ -55,36 +55,36 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
             Set<ShardRouting> ineligibleShards = new HashSet<>();
             for (ShardRouting shard : shardBatch) {
                 if (shard.primary()) {
-                    ineligibleShards.add(shard);
+//                    ineligibleShards.add(shard);
                     continue;
                 }
                 if (shard.initializing() == false) {
-                    ineligibleShards.add(shard);
+//                    ineligibleShards.add(shard);
                     continue;
                 }
                 if (shard.relocatingNodeId() != null) {
-                    ineligibleShards.add(shard);
+//                    ineligibleShards.add(shard);
                     continue;
                 }
 
                 // if we are allocating a replica because of index creation, no need to go and find a copy, there isn't one...
                 if (shard.unassignedInfo() != null && shard.unassignedInfo().getReason() == UnassignedInfo.Reason.INDEX_CREATED) {
-                    ineligibleShards.add(shard);
+                    //ineligibleShards.add(shard);
                     continue;
                 }
                 eligibleFetchShards.add(shard);
             }
-            AsyncBatchShardFetch.FetchResult <NodeStoreFilesMetadataBatch> shardState = fetchData(eligibleFetchShards, ineligibleShards, allocation);
-            if (shardState.hasData()) {
+            AsyncBatchShardFetch.FetchResult<NodeStoreFilesMetadataBatch> shardState = fetchData(eligibleFetchShards, ineligibleShards, allocation);
+            if (shardState.hasData() == false) {
                 logger.trace("{}: fetching new stores for initializing shard batch", eligibleFetchShards);
                 continue; // still fetching
             }
-            for (ShardRouting shard: eligibleFetchShards) {
+            for (ShardRouting shard : eligibleFetchShards) {
                 ShardRouting primaryShard = allocation.routingNodes().activePrimary(shard.shardId());
                 assert primaryShard != null : "the replica shard can be allocated on at least one node, so there must be an active primary";
                 assert primaryShard.currentNodeId() != null;
                 final DiscoveryNode primaryNode = allocation.nodes().get(primaryShard.currentNodeId());
-                final TransportNodesListShardStoreMetadataBatch.StoreFilesMetadata primaryStore= findStore(primaryNode, shardState, shard);
+                final TransportNodesListShardStoreMetadataBatch.StoreFilesMetadata primaryStore = findStore(primaryNode, shardState, shard);
                 if (primaryStore == null) {
                     // if we can't find the primary data, it is probably because the primary shard is corrupted (and listing failed)
                     // just let the recovery find it out, no need to do anything about it for the initializing shard
@@ -166,7 +166,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
         Set<ShardRouting> shardsEligibleForFetch = new HashSet<>();
         Set<ShardRouting> shardsNotEligibleForFetch = new HashSet<>();
         HashMap<ShardRouting, Tuple<Decision, Map<String, NodeAllocationResult>>> nodeAllocationDecisions = new HashMap<>();
-        for(ShardRouting shard : shards) {
+        for (ShardRouting shard : shards) {
             if (!isResponsibleFor(shard)) {
                 // this allocator n is not responsible for allocating this shard
                 shardsNotEligibleForFetch.add(shard);
@@ -176,11 +176,11 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
 
             Tuple<Decision, Map<String, NodeAllocationResult>> result = canBeAllocatedToAtLeastOneNode(shard, allocation);
             Decision allocationDecision = result.v1();
-            if (allocationDecision.type() != Decision.Type.YES && (!explain || !hasInitiatedFetching(shard))){
+            if (allocationDecision.type() != Decision.Type.YES && (!explain || !hasInitiatedFetching(shard))) {
                 // only return early if we are not in explain mode, or we are in explain mode but we have not
                 // yet attempted to fetch any shard data
                 logger.trace("{}: ignoring allocation, can't be allocated on any node", shard);
-                shardsNotEligibleForFetch.add(shard);
+//                shardsNotEligibleForFetch.add(shard);
                 shardAllocationDecisions.put(shard,
                     AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.fromDecision(allocationDecision.type()),
                         result.v2() != null ? new ArrayList<>(result.v2().values()) : null));
@@ -420,7 +420,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
 
     /**
      * Determines if the shard can be allocated on at least one node based on the allocation deciders.
-     *
+     * <p>
      * Returns the best allocation decision for allocating the shard on any node (i.e. YES if at least one
      * node decided YES, THROTTLE if at least one node decided THROTTLE, and NO if none of the nodes decided
      * YES or THROTTLE).  If in explain mode, also returns the node-level explanations as the second element
