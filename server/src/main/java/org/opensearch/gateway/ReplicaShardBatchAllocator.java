@@ -54,6 +54,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
             Set<ShardRouting> ineligibleShards = new HashSet<>();
             for (ShardRouting shard : shardBatch) {
                 if (shard.primary()) {
+                    ineligibleShards.add(shard);
                     continue;
                 }
                 if (shard.initializing() == false) {
