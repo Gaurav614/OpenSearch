@@ -960,11 +960,11 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
         }
 
         @Override
-        protected AsyncBatchShardFetch.FetchResult
+        protected AsyncShardFetch.FetchResult
             <TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> fetchData(
             Set<ShardRouting> shardsEligibleForFetch, Set<ShardRouting> inEligibleShards,
             RoutingAllocation allocation) {
-            return new AsyncBatchShardFetch.FetchResult<>(data,
+            return new AsyncShardFetch.FetchResult<>(data,
                 Collections.<ShardId, Set<String>>emptyMap());
         }
     }

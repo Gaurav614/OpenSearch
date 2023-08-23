@@ -23,7 +23,7 @@ import org.opensearch.cluster.routing.allocation.decider.Decision;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.common.unit.TimeValue;
-import org.opensearch.gateway.AsyncBatchShardFetch.FetchResult;
+import org.opensearch.gateway.AsyncShardFetch.FetchResult;
 import org.opensearch.index.store.StoreFileMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch;
@@ -70,8 +70,8 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
                 }
                 eligibleFetchShards.add(shard);
             }
-            AsyncBatchShardFetch.FetchResult<NodeStoreFilesMetadataBatch> shardState = fetchData(eligibleFetchShards, ineligibleShards, allocation);
-            if (shardState.hasData() == false) {
+            AsyncShardFetch.FetchResult <NodeStoreFilesMetadataBatch> shardState = fetchData(eligibleFetchShards, ineligibleShards, allocation);
+            if (!shardState.hasData()) {
                 logger.trace("{}: fetching new stores for initializing shard batch", eligibleFetchShards);
                 continue; // still fetching
             }

@@ -313,7 +313,7 @@ public class ReplicaShardBatchAllocatorTest extends OpenSearchAllocationTestCase
         }
 
         @Override
-        protected AsyncBatchShardFetch.FetchResult<NodeStoreFilesMetadataBatch> fetchData(Set<ShardRouting> shardEligibleForFetch, Set<ShardRouting> inEligibleShards, RoutingAllocation allocation) {
+        protected AsyncShardFetch.FetchResult<NodeStoreFilesMetadataBatch> fetchData(Set<ShardRouting> shardEligibleForFetch, Set<ShardRouting> inEligibleShards, RoutingAllocation allocation) {
             fetchDataCalled.set(true);
             Map<DiscoveryNode, NodeStoreFilesMetadataBatch> tData = null;
             if (data != null) {
@@ -329,9 +329,8 @@ public class ReplicaShardBatchAllocatorTest extends OpenSearchAllocationTestCase
                     );
                 }
             }
-            return new AsyncBatchShardFetch.FetchResult<>(tData, Collections.<ShardId, Set<String>>emptyMap());
+            return new AsyncShardFetch.FetchResult<>(tData, Collections.<ShardId, Set<String>>emptyMap());
         }
-
         @Override
         protected boolean hasInitiatedFetching(ShardRouting shard) {
             return fetchDataCalled.get();
