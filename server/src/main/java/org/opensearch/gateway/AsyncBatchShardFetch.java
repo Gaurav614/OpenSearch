@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static java.util.Collections.emptyMap;
+import static java.util.Collections.unmodifiableMap;
 import static java.util.Collections.unmodifiableSet;
 
 /**
@@ -112,6 +113,14 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
             throw new IllegalStateException(batchUUID + ": can't fetch data on closed async fetch");
         }
 
+        // add the nodes to ignore to the list of nodes to ignore for each shard
+        // This information is only used for retrying. Fetching is still a broadcast to all available nodes
+        for(Map.Entry <ShardId, Set<String>> ignoreNodesEntry : ignoreNodes.entrySet()){
+            Set<String> ignoreNodesSet = ignoredShardToNodes.getOrDefault(ignoreNodesEntry.getKey(), new HashSet<>());
+            ignoreNodesSet.addAll(ignoreNodesEntry.getValue());
+            ignoredShardToNodes.put(ignoreNodesEntry.getKey(), ignoreNodesSet);
+        }
+
         // create a flat map for all ignore nodes in a batch.
         // This information is only used for retrying. Fetching is still a broadcast to all available nodes
         nodesToIgnore.addAll(ignoreNodes.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()));
@@ -157,7 +166,7 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
                     }
                 }
             }
-            Set<String> allIgnoreNodes = unmodifiableSet(new HashSet<>(nodesToIgnore));
+            Map<ShardId, Set<String>> allIgnoreNodes = Map.copyOf(ignoredShardToNodes);
             // clear the nodes to ignore, we had a successful run in fetching everything we can
             // we need to try them if another full run is needed
             nodesToIgnore.clear();
@@ -165,10 +174,12 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
             // if at least one node failed, make sure to have a protective reroute
             // here, just case this round won't find anything, and we need to retry fetching data
             if (failedNodes.isEmpty() == false || allIgnoreNodes.isEmpty() == false) {
-                reroute(batchUUID, "nodes failed [" + failedNodes.size() + "], ignored [" + allIgnoreNodes.size() + "]");
+                reroute(batchUUID,
+                    "nodes failed [" + failedNodes.size() + "], ignored [" + allIgnoreNodes.values().stream().
+                        mapToInt(Set::size).sum() + "]");
             }
 
-            return new AsyncBatchShardFetch.FetchResult<>(fetchData, ignoredShardToNodes);
+            return new AsyncBatchShardFetch.FetchResult<>(fetchData, allIgnoreNodes);
         }
     }
 
