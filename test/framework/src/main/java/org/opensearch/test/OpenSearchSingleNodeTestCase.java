@@ -32,6 +32,7 @@
 package org.opensearch.test;
 
 import com.carrotsearch.randomizedtesting.RandomizedContext;
+
 import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
 import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
 import org.opensearch.action.admin.indices.create.CreateIndexRequestBuilder;
@@ -45,6 +46,8 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.routing.allocation.DiskThresholdSettings;
 import org.opensearch.common.Priority;
+import org.opensearch.common.settings.FeatureFlagSettings;
+import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.BigArrays;
@@ -52,11 +55,11 @@ import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.core.common.Strings;
+import org.opensearch.core.index.Index;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
-import org.opensearch.core.index.Index;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.indices.IndicesService;
@@ -66,6 +69,7 @@ import org.opensearch.node.Node;
 import org.opensearch.node.NodeValidationException;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.script.MockScriptService;
+import org.opensearch.search.SearchService;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.telemetry.TelemetrySettings;
 import org.opensearch.test.telemetry.MockTelemetryPlugin;
@@ -223,7 +227,8 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
         final Path tempDir = createTempDir();
         final String nodeName = nodeSettings().get(Node.NODE_NAME_SETTING.getKey(), "node_s_0");
 
-        Settings settings = Settings.builder()
+        final Settings featureFlagSettings = featureFlagSettings();
+        Settings.Builder settingsBuilder = Settings.builder()
             .put(ClusterName.CLUSTER_NAME_SETTING.getKey(), InternalTestCluster.clusterName("single-node-cluster", random().nextLong()))
             .put(Environment.PATH_HOME_SETTING.getKey(), tempDir)
             .put(Environment.PATH_REPO_SETTING.getKey(), tempDir.resolve("repo"))
@@ -248,7 +253,12 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
             .put(FeatureFlags.TELEMETRY_SETTING.getKey(), true)
             .put(TelemetrySettings.TRACER_ENABLED_SETTING.getKey(), true)
             .put(nodeSettings()) // allow test cases to provide their own settings or override these
-            .build();
+            .put(featureFlagSettings);
+        if (FeatureFlags.CONCURRENT_SEGMENT_SEARCH_SETTING.get(featureFlagSettings)) {
+            // By default, for tests we will put the target slice count of 2. This will increase the probability of having multiple slices
+            // when tests are run with concurrent segment search enabled
+            settingsBuilder.put(SearchService.CONCURRENT_SEGMENT_SEARCH_TARGET_MAX_SLICE_COUNT_KEY, 2);
+        }
 
         Collection<Class<? extends Plugin>> plugins = getPlugins();
         if (plugins.contains(getTestTransportPlugin()) == false) {
@@ -260,7 +270,7 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
         }
         plugins.add(MockScriptService.TestPlugin.class);
         plugins.add(MockTelemetryPlugin.class);
-        Node node = new MockNode(settings, plugins, forbidPrivateIndexSettings());
+        Node node = new MockNode(settingsBuilder.build(), plugins, forbidPrivateIndexSettings());
         try {
             node.start();
         } catch (NodeValidationException e) {
@@ -412,6 +422,21 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
 
     protected boolean forbidPrivateIndexSettings() {
         return true;
+    }
+
+    /**
+     * Setting all feature flag settings at base IT, which can be overridden later by individual
+     * IT classes.
+     *
+     * @return Feature flag settings.
+     */
+    protected Settings featureFlagSettings() {
+        Settings.Builder featureSettings = Settings.builder();
+        for (Setting builtInFlag : FeatureFlagSettings.BUILT_IN_FEATURE_FLAGS) {
+            featureSettings.put(builtInFlag.getKey(), builtInFlag.getDefaultRaw(Settings.EMPTY));
+        }
+        featureSettings.put(FeatureFlags.TELEMETRY_SETTING.getKey(), true);
+        return featureSettings.build();
     }
 
 }

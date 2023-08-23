@@ -40,14 +40,14 @@ import org.opensearch.action.ValidateActions;
 import org.opensearch.action.get.MultiGetRequest;
 import org.opensearch.action.support.single.shard.SingleShardRequest;
 import org.opensearch.common.Nullable;
+import org.opensearch.common.lucene.uid.Versions;
+import org.opensearch.common.util.set.Sets;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.common.util.set.Sets;
 import org.opensearch.core.xcontent.MediaType;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -186,7 +186,7 @@ public class TermVectorsRequest extends SingleShardRequest<TermVectorsRequest> i
 
         if (in.readBoolean()) {
             doc = in.readBytesReference();
-            if (in.getVersion().onOrAfter(Version.V_3_0_0)) {
+            if (in.getVersion().onOrAfter(Version.V_2_10_0)) {
                 mediaType = in.readMediaType();
             } else {
                 mediaType = in.readEnum(XContentType.class);
@@ -538,7 +538,7 @@ public class TermVectorsRequest extends SingleShardRequest<TermVectorsRequest> i
         out.writeBoolean(doc != null);
         if (doc != null) {
             out.writeBytesReference(doc);
-            if (out.getVersion().onOrAfter(Version.V_3_0_0)) {
+            if (out.getVersion().onOrAfter(Version.V_2_10_0)) {
                 mediaType.writeTo(out);
             } else {
                 out.writeEnum((XContentType) mediaType);

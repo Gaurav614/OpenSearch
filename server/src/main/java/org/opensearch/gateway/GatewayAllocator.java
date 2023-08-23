@@ -36,7 +36,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.opensearch.Version;
-import org.opensearch.action.ActionListener;
 import org.opensearch.action.support.nodes.BaseNodeResponse;
 import org.opensearch.action.support.nodes.BaseNodesResponse;
 import org.opensearch.cluster.metadata.IndexMetadata;
@@ -54,9 +53,10 @@ import org.opensearch.common.UUIDs;
 import org.opensearch.common.inject.Inject;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.lease.Releasables;
 import org.opensearch.common.util.concurrent.ConcurrentCollections;
 import org.opensearch.common.util.set.Sets;
-import org.opensearch.common.lease.Releasables;
+import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
@@ -202,7 +202,6 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     @Override
     public void afterPrimariesBeforeReplicas(RoutingAllocation allocation) {
         boolean batchMode = allocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT);
-        ;
         if (batchMode) {
             assert replicaBatchShardAllocator != null;
             List<Set<ShardRouting>> storedShardBatches = batchIdToStoreShardBatch.values().stream()
@@ -249,11 +248,11 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     private void createBatches(RoutingAllocation allocation, boolean primary) {
         RoutingNodes.UnassignedShards unassigned = allocation.routingNodes().unassigned();
         // fetch all current batched shards
-        Set<ShardId> currentBatchedShards = primary? startedShardBatchLookup.keySet() : storeShardBatchLookup.keySet();
+        ConcurrentMap<ShardId, String> currentBatchedShards = primary? startedShardBatchLookup : storeShardBatchLookup;
         Set<ShardRouting> shardsToBatch = Sets.newHashSet();
         // add all unassigned shards to the batch if they are not already in a batch
         unassigned.forEach(shardRouting -> {
-            if ((currentBatchedShards.contains(shardRouting.shardId()) == false) && (shardRouting.primary() == primary)) {
+            if ((currentBatchedShards.containsKey(shardRouting.shardId()) == false) && (shardRouting.primary() == primary)) {
                 assert shardRouting.unassigned();
                 shardsToBatch.add(shardRouting);
             }
