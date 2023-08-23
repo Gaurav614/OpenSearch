@@ -224,6 +224,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
                 // Note, this is the existing behavior, as exposed in running CorruptFileTest#testNoPrimaryData
                 logger.trace("{}: no primary shard store found or allocated, letting actual allocation figure it out", unassignedShard);
                 shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.NOT_TAKEN);
+                continue;
             }
 
             // find the matching nodes
@@ -285,6 +286,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
                     remainingDelayMillis = TimeValue.timeValueNanos(remainingDelayNanos).millis();
                 }
                 shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.delayed(remainingDelayMillis, totalDelayMillis, nodeDecisions));
+                continue;
             }
 
             shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.NOT_TAKEN);
