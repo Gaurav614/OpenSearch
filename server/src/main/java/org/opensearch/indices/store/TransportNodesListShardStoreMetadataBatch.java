@@ -29,7 +29,7 @@ import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.env.NodeEnvironment;
-import org.opensearch.gateway.AsyncBatchShardFetch;
+import org.opensearch.gateway.AsyncShardFetch;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.seqno.ReplicationTracker;
@@ -64,7 +64,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
     TransportNodesListShardStoreMetadataBatch.NodeRequest,
     TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch>
     implements
-        AsyncBatchShardFetch.Lister<
+        AsyncShardFetch.Lister<
             TransportNodesListShardStoreMetadataBatch.NodesStoreFilesMetadataBatch,
             TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> {
 
@@ -106,8 +106,8 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
 
     @Override
     public void list(
-        DiscoveryNode[] nodes,
         Map<ShardId, String> shardIdsWithCustomDataPath,
+        DiscoveryNode[] nodes,
         ActionListener<NodesStoreFilesMetadataBatch> listener
     ) {
         execute(new TransportNodesListShardStoreMetadataBatch.Request(shardIdsWithCustomDataPath, nodes), listener);
