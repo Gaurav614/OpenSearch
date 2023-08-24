@@ -173,7 +173,7 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
 
             // if at least one node failed, make sure to have a protective reroute
             // here, just case this round won't find anything, and we need to retry fetching data
-            if (failedNodes.isEmpty() == false || allIgnoreNodes.isEmpty() == false) {
+            if (failedNodes.isEmpty() == false || allIgnoreNodes.values().stream().anyMatch(Set::isEmpty) == false) {
                 reroute(batchUUID,
                     "nodes failed [" + failedNodes.size() + "], ignored [" + allIgnoreNodes.values().stream().
                         mapToInt(Set::size).sum() + "]");

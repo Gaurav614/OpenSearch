@@ -51,6 +51,7 @@ import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.common.Priority;
 import org.opensearch.common.UUIDs;
 import org.opensearch.common.inject.Inject;
+import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.lease.Releasables;
@@ -71,7 +72,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.Spliterators;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -143,7 +143,9 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         asyncFetchStarted.clear();
         Releasables.close(asyncFetchStore.values());
         asyncFetchStore.clear();
+        Releasables.close(batchIdToStartedShardBatch.values().stream().map(shardsBatch -> shardsBatch.asyncBatch).collect(Collectors.toList()));
         batchIdToStartedShardBatch.clear();
+        Releasables.close(batchIdToStoreShardBatch.values().stream().map(shardsBatch -> shardsBatch.asyncBatch).collect(Collectors.toList()));
         batchIdToStoreShardBatch.clear();
         startedShardBatchLookup.clear();
         storeShardBatchLookup.clear();
@@ -177,7 +179,8 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         for (ShardRouting startedShard : startedShards) {
             Releasables.close(asyncFetchStarted.remove(startedShard.shardId()));
             Releasables.close(asyncFetchStore.remove(startedShard.shardId()));
-            safelyRemoveShardFromBatch(startedShard);
+//            safelyRemoveShardFromBatch(startedShard);
+            safelyRemoveShardFromBothBatch(startedShard);
         }
     }
 
@@ -186,7 +189,8 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         for (FailedShard failedShard : failedShards) {
             Releasables.close(asyncFetchStarted.remove(failedShard.getRoutingEntry().shardId()));
             Releasables.close(asyncFetchStore.remove(failedShard.getRoutingEntry().shardId()));
-            safelyRemoveShardFromBatch(failedShard.getRoutingEntry());
+//            safelyRemoveShardFromBatch(failedShard.getRoutingEntry());
+            safelyRemoveShardFromBothBatch(failedShard.getRoutingEntry());
         }
     }
 
@@ -249,12 +253,21 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         RoutingNodes.UnassignedShards unassigned = allocation.routingNodes().unassigned();
         // fetch all current batched shards
         ConcurrentMap<ShardId, String> currentBatchedShards = primary? startedShardBatchLookup : storeShardBatchLookup;
+        ConcurrentMap<String, ShardsBatch> currentBatches = primary? batchIdToStartedShardBatch : batchIdToStoreShardBatch;
         Set<ShardRouting> shardsToBatch = Sets.newHashSet();
         // add all unassigned shards to the batch if they are not already in a batch
         unassigned.forEach(shardRouting -> {
             if ((currentBatchedShards.containsKey(shardRouting.shardId()) == false) && (shardRouting.primary() == primary)) {
                 assert shardRouting.unassigned();
                 shardsToBatch.add(shardRouting);
+            }
+            else if (shardRouting.primary() == primary) {
+                // ToDo: Either update ShardRoutings here  as some shards may be in INIT state.
+                // Or apply a check at BaseGatewayShardsAllocator to not send initialize call for a shard which is not
+                // unassigned. If these ShardRouting passed from fetcher maps are final, we'll keep getting
+                // all of them as unassigned shards until moved to started.
+                currentBatches.get(currentBatchedShards.get(shardRouting.shardId())).batchInfo.get(
+                    shardRouting.shardId()).setShardRouting(shardRouting);
             }
         });
         // below code will only run for the shards which truly needs batching, and one shard won't go in different
@@ -325,6 +338,34 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             Releasables.close(batch.getAsyncFetcher());
             batches.remove(batchId);
         }
+    }
+
+    private void safelyRemoveShardFromBothBatch(ShardRouting shardRouting) {
+        ShardId shardId = shardRouting.shardId();
+        String primaryBatchId = startedShardBatchLookup.get(shardId);
+        String replicaBatchId = storeShardBatchLookup.get(shardId);
+        if (primaryBatchId == null && replicaBatchId == null) {
+            return;
+        }
+        if (primaryBatchId != null){
+            ShardsBatch batch = batchIdToStartedShardBatch.get(primaryBatchId);
+            batch.removeFromBatch(shardRouting);
+            // remove the batch if it is empty
+            if (batch.getBatchedShards().isEmpty()) {
+                Releasables.close(batch.getAsyncFetcher());
+                batchIdToStartedShardBatch.remove(primaryBatchId);
+            }
+        }
+        if (replicaBatchId != null){
+            ShardsBatch batch = batchIdToStoreShardBatch.get(replicaBatchId);
+            batch.removeFromBatch(shardRouting);
+            // remove the batch if it is empty
+            if (batch.getBatchedShards().isEmpty()) {
+                Releasables.close(batch.getAsyncFetcher());
+                batchIdToStoreShardBatch.remove(replicaBatchId);
+            }
+        }
+
     }
 
     // allow for testing infra to change shard allocators implementation
@@ -461,7 +502,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             logger.trace("{} scheduling reroute for {}", batchUUId, reason);
             assert rerouteService != null;
             rerouteService.reroute(
-                "async_shard_fetch",
+                "async_shard_fetch_batch",
                 Priority.HIGH,
                 ActionListener.wrap(
                     r -> logger.trace("{} scheduled reroute completed for {}", batchUUId, reason),
@@ -696,7 +737,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
             batchInfo.remove(shard.shardId());
             asyncBatch.shardsToCustomDataPathMap.remove(shard.shardId());
-            assert shard.primary() == primary : "Illegal call to delete shard from batch";
+//            assert shard.primary() == primary : "Illegal call to delete shard from batch";
             // remove from lookup
             if (this.primary) {
                 startedShardBatchLookup.remove(shard.shardId());
@@ -753,7 +794,13 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     private class ShardBatchEntry {
 
         private final String customDataPath;
-        private final ShardRouting shardRouting;
+
+        public ShardBatchEntry setShardRouting(ShardRouting shardRouting) {
+            this.shardRouting = shardRouting;
+            return this;
+        }
+
+        private ShardRouting shardRouting;
 
         public ShardBatchEntry(String customDataPath, ShardRouting shardRouting) {
             this.customDataPath = customDataPath;

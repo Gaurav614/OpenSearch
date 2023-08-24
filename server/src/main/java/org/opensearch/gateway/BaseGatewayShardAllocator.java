@@ -95,15 +95,18 @@ public abstract class BaseGatewayShardAllocator {
         while (iterator.hasNext()) {
             ShardRouting shard = iterator.next();
             try {
-                if (shards.stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId()) &&
-                    shardRouting.primary() == shard.primary()).count() == 1) {
-                    List<ShardRouting> matchedShardRouting =
-                        decisionMap.keySet().stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId())
-                            && shardRouting.primary() == shard.primary()).collect(Collectors.toList());
-                    executeDecision(shard,
-                        decisionMap.get(matchedShardRouting.get(0)),
-                        allocation,
-                        iterator);
+                if (decisionMap.isEmpty() == false) {
+                    if (shards.stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId()) &&
+                        shardRouting.primary() == shard.primary()).count() == 1) {
+                        List<ShardRouting> matchedShardRouting =
+                            decisionMap.keySet().stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId())
+                                && shardRouting.primary() == shard.primary()).collect(Collectors.toList());
+                        assert matchedShardRouting.size() == 1 : "exactly 1 decision should be there for 1 shard routing";
+                        executeDecision(shard,
+                            decisionMap.remove(matchedShardRouting.get(0)),
+                            allocation,
+                            iterator);
+                    }
                 }
             } catch (Exception e) {
                 logger.error("failed to execute decision for shard {} ", shard, e);

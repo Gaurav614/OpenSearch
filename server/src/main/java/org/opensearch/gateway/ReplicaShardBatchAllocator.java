@@ -52,23 +52,37 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
         for (Set<ShardRouting> shardBatch : shardBatches) {
             Set<ShardRouting> eligibleFetchShards = new HashSet<>();
             Set<ShardRouting> ineligibleShards = new HashSet<>();
+            boolean shardMatched;
             for (ShardRouting shard : shardBatch) {
-                if (shard.primary()) {
-                    ineligibleShards.add(shard);
-                    continue;
-                }
-                if (shard.initializing() == false) {
-                    continue;
-                }
-                if (shard.relocatingNodeId() != null) {
-                    continue;
-                }
+                shardMatched = false;
+                for (RoutingNode routingNode : routingNodes) {
+                    if (routingNode.getByShardId(shard.shardId()) != null) {
+                        ShardRouting shardFromRoutingNode = routingNode.getByShardId(shard.shardId());
+                        if (!shardFromRoutingNode.primary()){
+                            shardMatched = true;
+                            if (shardFromRoutingNode.primary()) {
+//                                ineligibleShards.add(shard);
+                                continue;
+                            }
+                            if (shardFromRoutingNode.initializing() == false) {
+                                continue;
+                            }
+                            if (shardFromRoutingNode.relocatingNodeId() != null) {
+                                continue;
+                            }
 
-                // if we are allocating a replica because of index creation, no need to go and find a copy, there isn't one...
-                if (shard.unassignedInfo() != null && shard.unassignedInfo().getReason() == UnassignedInfo.Reason.INDEX_CREATED) {
-                    continue;
+                            // if we are allocating a replica because of index creation, no need to go and find a copy, there isn't one...
+                            if (shardFromRoutingNode.unassignedInfo() != null && shardFromRoutingNode.unassignedInfo()
+                                .getReason() == UnassignedInfo.Reason.INDEX_CREATED) {
+                                continue;
+                            }
+                            eligibleFetchShards.add(shardFromRoutingNode);
+                        }
+                    }
+                    if (shardMatched){
+                        break;
+                    }
                 }
-                eligibleFetchShards.add(shard);
             }
             AsyncBatchShardFetch.FetchResult<NodeStoreFilesMetadataBatch> shardState = fetchData(eligibleFetchShards, ineligibleShards, allocation);
             if (shardState.hasData() == false) {
@@ -224,6 +238,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
                 // Note, this is the existing behavior, as exposed in running CorruptFileTest#testNoPrimaryData
                 logger.trace("{}: no primary shard store found or allocated, letting actual allocation figure it out", unassignedShard);
                 shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.NOT_TAKEN);
+                continue;
             }
 
             // find the matching nodes
@@ -285,6 +300,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
                     remainingDelayMillis = TimeValue.timeValueNanos(remainingDelayNanos).millis();
                 }
                 shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.delayed(remainingDelayMillis, totalDelayMillis, nodeDecisions));
+                continue;
             }
 
             shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.NOT_TAKEN);
