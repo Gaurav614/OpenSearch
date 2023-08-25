@@ -165,7 +165,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
 
     @Override
     public AllocateUnassignedDecision makeAllocationDecision(ShardRouting unassignedShard, RoutingAllocation allocation, Logger logger) {
-        return null;
+        return makeAllocationDecision(new HashSet<>(Collections.singletonList(unassignedShard)), allocation, logger).get(unassignedShard);
     }
 
     @Override
