@@ -388,7 +388,9 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     public AllocateUnassignedDecision explainUnassignedShardAllocation(ShardRouting unassignedShard, RoutingAllocation routingAllocation) {
         assert unassignedShard.unassigned();
         assert routingAllocation.debugDecision();
-        boolean batchMode = routingAllocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT);
+//        boolean batchMode = routingAllocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT);
+        // ToDo: Integ tests pass without enabling batch mode, implementing batch mode can be picked up later for this method
+        boolean batchMode = false;
         if (batchMode) {
             if (unassignedShard.primary()) {
                 assert primaryBatchShardAllocator != null;
