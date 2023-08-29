@@ -111,9 +111,10 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
 
     /**
      * Build allocation decisions for all the shards present in the batch identified by batchId.
-     * @param shards set of shards given for allocation
+     *
+     * @param shards     set of shards given for allocation
      * @param allocation current allocation of all the shards
-     * @param logger logger used for logging
+     * @param logger     logger used for logging
      * @return shard to allocation decision map
      */
     @Override
@@ -133,6 +134,10 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
             } else {
                 shardsEligibleForFetch.add(shard);
             }
+        }
+        // Do not call fetchData if there are no eligible shards
+        if (shardsEligibleForFetch.size() == 0) {
+            return shardAllocationDecisions;
         }
         // only fetch data for eligible shards
         final FetchResult<NodeGatewayStartedShardsBatch> shardsState = fetchData(shardsEligibleForFetch, shardsNotEligibleForFetch, allocation);
@@ -175,10 +180,11 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
      * BaseNodeResponse. So, DiscoveryNode reference is passed in Map&lt;DiscoveryNode, NodeGatewayStartedShards&gt; so
      * corresponding DiscoveryNode object can be used for rest of the implementation. Also, DiscoveryNode object
      * reference is added in DecidedNode class to achieve same use case of accessing corresponding DiscoveryNode object.
+     *
      * @param unassignedShard unassigned shard routing
-     * @param allocation routing allocation object
-     * @param shardState shard metadata fetched from all data nodes
-     * @param logger logger
+     * @param allocation      routing allocation object
+     * @param shardState      shard metadata fetched from all data nodes
+     * @param logger          logger
      * @return allocation decision taken for this shard
      */
     private AllocateUnassignedDecision getAllocationDecision(ShardRouting unassignedShard, RoutingAllocation allocation,
@@ -322,8 +328,9 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
     /**
      * Skip doing fetchData call for a shard if recovery mode is snapshot. Also do not take decision if allocator is
      * not responsible for this particular shard.
+     *
      * @param unassignedShard unassigned shard routing
-     * @param allocation routing allocation object
+     * @param allocation      routing allocation object
      * @return allocation decision taken for this shard
      */
     private AllocateUnassignedDecision skipSnapshotRestore(ShardRouting unassignedShard, RoutingAllocation allocation) {
@@ -544,7 +551,7 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
     }
 
     private static class NodeShardsResult {
-        final TreeMap<NodeGatewayStartedShards, DiscoveryNode>  orderedAllocationCandidates;
+        final TreeMap<NodeGatewayStartedShards, DiscoveryNode> orderedAllocationCandidates;
         final int allocationsFound;
 
         NodeShardsResult(TreeMap<NodeGatewayStartedShards, DiscoveryNode> orderedAllocationCandidates, int allocationsFound) {

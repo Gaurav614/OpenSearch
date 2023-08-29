@@ -101,11 +101,15 @@ public abstract class BaseGatewayShardAllocator {
                         List<ShardRouting> matchedShardRouting =
                             decisionMap.keySet().stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId())
                                 && shardRouting.primary() == shard.primary()).collect(Collectors.toList());
-                        assert matchedShardRouting.size() == 1 : "exactly 1 decision should be there for 1 shard routing";
-                        executeDecision(shard,
-                            decisionMap.remove(matchedShardRouting.get(0)),
-                            allocation,
-                            iterator);
+                        if (matchedShardRouting.size() == 1) {
+                            executeDecision(shard,
+                                decisionMap.remove(matchedShardRouting.get(0)),
+                                allocation,
+                                iterator);
+                        } else if (matchedShardRouting.size() > 1){
+                            // Adding this just to check the behaviour if we ever land up here.
+                            throw new IllegalStateException("decision map must have single entry for 1 shard");
+                        }
                     }
                 }
             } catch (Exception e) {

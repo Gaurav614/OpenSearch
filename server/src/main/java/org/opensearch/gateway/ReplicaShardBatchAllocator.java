@@ -165,7 +165,8 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
 
     @Override
     public AllocateUnassignedDecision makeAllocationDecision(ShardRouting unassignedShard, RoutingAllocation allocation, Logger logger) {
-        return null;
+        return makeAllocationDecision(new HashSet<>(Collections.singletonList(unassignedShard)),
+            allocation, logger).get(unassignedShard);
     }
 
     @Override
@@ -202,6 +203,10 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
             shardsEligibleForFetch.add(shard);
         }
 
+        // Do not call fetchData if there are no eligible shards
+        if (shardsEligibleForFetch.size() == 0) {
+            return shardAllocationDecisions;
+        }
         // only fetch data for eligible shards
         final FetchResult<NodeStoreFilesMetadataBatch> shardsState = fetchData(shardsEligibleForFetch, shardsNotEligibleForFetch, allocation);
 
