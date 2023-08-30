@@ -163,12 +163,23 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
     @Override
     public int getNumberOfInFlightFetches() {
+        boolean batchModeEnabled = true;
         int count = 0;
-        for (AsyncShardFetch<TransportNodesListGatewayStartedShards.NodeGatewayStartedShards> fetch : asyncFetchStarted.values()) {
-            count += fetch.getNumberOfInFlightFetches();
+        if (batchModeEnabled) {
+            for (ShardsBatch batch : batchIdToStartedShardBatch.values()) {
+                count += batch.getNumberOfInFlightFetches();
+            }
+            for (ShardsBatch batch : batchIdToStoreShardBatch.values()) {
+                count += batch.getNumberOfInFlightFetches();
+            }
         }
-        for (AsyncShardFetch<TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata> fetch : asyncFetchStore.values()) {
-            count += fetch.getNumberOfInFlightFetches();
+        else {
+            for (AsyncShardFetch<TransportNodesListGatewayStartedShards.NodeGatewayStartedShards> fetch : asyncFetchStarted.values()) {
+                count += fetch.getNumberOfInFlightFetches();
+            }
+            for (AsyncShardFetch<TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata> fetch : asyncFetchStore.values()) {
+                count += fetch.getNumberOfInFlightFetches();
+            }
         }
         return count;
     }
@@ -794,6 +805,10 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
         AsyncShardFetch<? extends BaseNodeResponse> getAsyncFetcher() {
             return asyncBatch;
+        }
+
+        public int getNumberOfInFlightFetches() {
+            return asyncBatch.getNumberOfInFlightFetches();
         }
 
         @Override
