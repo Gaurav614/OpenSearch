@@ -178,18 +178,7 @@ public abstract class ReplicaShardBatchAllocator extends BaseGatewayShardAllocat
         Set<ShardRouting> shardsNotEligibleForFetch = new HashSet<>();
         HashMap<ShardRouting, Tuple<Decision, Map<String, NodeAllocationResult>>> nodeAllocationDecisions = new HashMap<>();
         for (ShardRouting shard : shards) {
-            ShardRouting matchingShard = null;
-            for (RoutingNode node: allocation.routingNodes()){
-                matchingShard = node.getByShardId(shard.shardId());
-                if (matchingShard != null && matchingShard.primary() == shard.primary()) {
-                    // we have a matching shard on this node, so this is a valid copy
-                    break;
-                }
-            }
-            if (matchingShard == null) {
-                matchingShard = shard;
-            }
-            if (!isResponsibleFor(matchingShard)) {
+            if (!isResponsibleFor(shard)) {
                 // this allocator n is not responsible for allocating this shard
                 shardsNotEligibleForFetch.add(shard);
                 shardAllocationDecisions.put(shard, AllocateUnassignedDecision.NOT_TAKEN);
