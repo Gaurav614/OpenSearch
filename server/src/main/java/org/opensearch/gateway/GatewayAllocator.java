@@ -51,7 +51,6 @@ import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.common.Priority;
 import org.opensearch.common.UUIDs;
 import org.opensearch.common.inject.Inject;
-import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.lease.Releasables;
@@ -65,6 +64,7 @@ import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch.No
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -237,18 +237,19 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     @Override
     public void allocateUnassignedBatch(final RoutingAllocation allocation, boolean primary) {
         // create batches for unassigned shards
-        createBatches(allocation, primary);
+        Set<String> batchesToAssign = createBatches(allocation, primary);
 
         assert primaryBatchShardAllocator != null;
         assert replicaBatchShardAllocator != null;
         if (primary) {
-            batchIdToStartedShardBatch.values().forEach(shardsBatch -> primaryBatchShardAllocator.allocateUnassignedBatch(shardsBatch.getBatchedShardRoutings(), allocation));
+            batchIdToStartedShardBatch.values().stream().filter(batch -> batchesToAssign.contains(batch.batchId)).forEach(shardsBatch -> primaryBatchShardAllocator.allocateUnassignedBatch(shardsBatch.getBatchedShardRoutings(), allocation));
         } else {
-            batchIdToStoreShardBatch.values().forEach(batch -> replicaBatchShardAllocator.allocateUnassignedBatch(batch.getBatchedShardRoutings(), allocation));
+            batchIdToStoreShardBatch.values().stream().filter(batch -> batchesToAssign.contains(batch.batchId)).forEach(batch -> replicaBatchShardAllocator.allocateUnassignedBatch(batch.getBatchedShardRoutings(), allocation));
         }
     }
 
-    private void createBatches(RoutingAllocation allocation, boolean primary) {
+    private Set<String> createBatches(RoutingAllocation allocation, boolean primary) {
+        Set<String> batchesToBeAssigned = new HashSet<>();
         RoutingNodes.UnassignedShards unassigned = allocation.routingNodes().unassigned();
         ConcurrentMap<String, ShardsBatch> currentBatches = primary ? batchIdToStartedShardBatch : batchIdToStoreShardBatch;
         // get all batched shards
@@ -267,6 +268,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
                 // unassigned. If these ShardRouting passed from fetcher maps are final, we'll keep getting
                 // all of them as unassigned shards until moved to started.
                 String batchId = getBatchId(shardRouting, shardRouting.primary());
+                batchesToBeAssigned.add(batchId);
                 currentBatches.get(batchId).batchInfo.get(
                     shardRouting.shardId()).setShardRouting(shardRouting);
             }
@@ -292,11 +294,13 @@ public class GatewayAllocator implements ExistingShardsAllocator {
                 ShardsBatch shardsBatch = new ShardsBatch(batchUUId, addToCurrentBatch, primary);
                 // add the batch to list of current batches
                 addBatch(shardsBatch, primary);
+                batchesToBeAssigned.add(batchUUId);
 //                addShardsIdsToLookup(addToCurrentBatch.keySet(), batchUUId, primary);
                 addToCurrentBatch.clear();
                 batchSize = maxBatchSize;
             }
         }
+        return batchesToBeAssigned;
     }
 
     private void addBatch(ShardsBatch shardsBatch, boolean primary) {
@@ -395,9 +399,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     public AllocateUnassignedDecision explainUnassignedShardAllocation(ShardRouting unassignedShard, RoutingAllocation routingAllocation) {
         assert unassignedShard.unassigned();
         assert routingAllocation.debugDecision();
-//        boolean batchMode = routingAllocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT);
-        // ToDo: Integ tests pass without enabling batch mode, implementing batch mode can be picked up later for this method
-        boolean batchMode = false;
+        boolean batchMode = routingAllocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT);
         if (batchMode) {
             if (unassignedShard.primary()) {
                 assert primaryBatchShardAllocator != null;
