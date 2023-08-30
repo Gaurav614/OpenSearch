@@ -127,7 +127,18 @@ public abstract class PrimaryShardBatchAllocator extends BaseGatewayShardAllocat
         Set<ShardRouting> shardsNotEligibleForFetch = new HashSet<>();
         // identify ineligible shards
         for (ShardRouting shard : shards) {
-            AllocateUnassignedDecision decision = skipSnapshotRestore(shard, allocation);
+            ShardRouting matchingShard = null;
+            for (RoutingNode node: allocation.routingNodes()) {
+                matchingShard = node.getByShardId(shard.shardId());
+                if (matchingShard != null && matchingShard.primary() == shard.primary()) {
+                    // we have a matching shard on this node, so this is a valid copy
+                    break;
+                }
+            }
+            if (matchingShard == null) {
+                matchingShard = shard;
+            }
+            AllocateUnassignedDecision decision = skipSnapshotRestore(matchingShard, allocation);
             if (decision != null) {
                 shardsNotEligibleForFetch.add(shard);
                 shardAllocationDecisions.put(shard, decision);
