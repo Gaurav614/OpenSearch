@@ -34,6 +34,7 @@ package org.opensearch.gateway;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.routing.RecoverySource;
 import org.opensearch.cluster.routing.RoutingNode;
 import org.opensearch.cluster.routing.RoutingNodes;
@@ -47,6 +48,7 @@ import org.opensearch.cluster.routing.allocation.decider.Decision;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
@@ -191,5 +193,18 @@ public abstract class BaseGatewayShardAllocator {
             results.add(new NodeAllocationResult(node.node(), null, decision));
         }
         return results;
+    }
+
+
+    protected interface INodeShardState {
+        BaseNodeGatewayStartedShards getShardState();
+        DiscoveryNode getNode();
+    }
+    protected interface INodeShardStates<T, V> {
+        void add(V value);
+        void add(T key, V value);
+        V get(T key);
+        int size();
+        Iterator<? extends INodeShardState> iterator();
     }
 }

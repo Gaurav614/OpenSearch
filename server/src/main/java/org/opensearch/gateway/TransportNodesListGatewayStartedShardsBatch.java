@@ -312,7 +312,7 @@ public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesA
      *
      * @opensearch.internal
      */
-    public static class NodeGatewayStartedShards {
+    public static class NodeGatewayStartedShards implements BaseNodeGatewayStartedShards {
         private final String allocationId;
         private final boolean primary;
         private final Exception storeException;
