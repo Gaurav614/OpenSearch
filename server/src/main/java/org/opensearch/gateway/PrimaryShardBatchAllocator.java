@@ -48,6 +48,7 @@ import org.opensearch.env.ShardLockObtainFailedException;
 import org.opensearch.gateway.AsyncShardFetch.FetchResult;
 import org.opensearch.gateway.TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch;
 import org.opensearch.gateway.TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShards;
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -172,9 +173,9 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
     }
 
     private static NodeShardStates getNodeShardStates(ShardRouting unassignedShard, FetchResult<NodeGatewayStartedShardsBatch> shardsState) {
-        NodeShardStates nodeShardStates = new NodeShardStates(new Comparator<INodeShardState>() {
+        NodeShardStates nodeShardStates = new NodeShardStates(new Comparator<NodeShardState>() {
             @Override
-            public int compare(INodeShardState o1, INodeShardState o2) {
+            public int compare(NodeShardState o1, NodeShardState o2) {
                 return 1;
             }
         });
@@ -182,29 +183,9 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
 
         // build data for a shard from all the nodes
         nodeResponses.forEach((node, nodeGatewayStartedShardsBatch) -> {
-            nodeShardStates.add(new NodeShardState(nodeGatewayStartedShardsBatch.getNodeGatewayStartedShardsBatch().get(unassignedShard.shardId()), node), node);
+            NodeGatewayStartedShards shardData = nodeGatewayStartedShardsBatch.getNodeGatewayStartedShardsBatch().get(unassignedShard.shardId());
+            nodeShardStates.add(new NodeShardState(node, shardData.allocationId(), shardData.primary(), shardData.replicationCheckpoint(), shardData.storeException()), node);
         });
         return nodeShardStates;
-    }
-
-
-    private static class NodeShardState implements INodeShardState {
-        NodeGatewayStartedShards shardState;
-        DiscoveryNode node;
-
-        public NodeShardState(NodeGatewayStartedShards shardState, DiscoveryNode node) {
-            this.shardState = shardState;
-            this.node = node;
-        }
-
-        @Override
-        public BaseNodeGatewayStartedShards getShardState() {
-            return this.shardState;
-        }
-
-        @Override
-        public DiscoveryNode getNode() {
-            return this.node;
-        }
     }
 }

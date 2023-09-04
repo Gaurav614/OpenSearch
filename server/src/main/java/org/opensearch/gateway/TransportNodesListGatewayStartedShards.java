@@ -350,7 +350,7 @@ public class TransportNodesListGatewayStartedShards extends TransportNodesAction
      *
      * @opensearch.internal
      */
-    public static class NodeGatewayStartedShards extends BaseNodeResponse implements BaseNodeGatewayStartedShards {
+    public static class NodeGatewayStartedShards extends BaseNodeResponse {
         private final String allocationId;
         private final boolean primary;
         private final Exception storeException;
