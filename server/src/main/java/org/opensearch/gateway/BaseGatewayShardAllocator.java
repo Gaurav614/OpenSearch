@@ -200,11 +200,4 @@ public abstract class BaseGatewayShardAllocator {
         BaseNodeGatewayStartedShards getShardState();
         DiscoveryNode getNode();
     }
-    protected interface INodeShardStates<T, V> {
-        void add(V value);
-        void add(T key, V value);
-        V get(T key);
-        int size();
-        Iterator<? extends INodeShardState> iterator();
-    }
 }

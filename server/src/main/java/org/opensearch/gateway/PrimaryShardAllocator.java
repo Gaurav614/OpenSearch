@@ -59,7 +59,9 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -134,12 +136,20 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
             }
             return AllocateUnassignedDecision.no(AllocationStatus.FETCHING_SHARD_DATA, nodeDecisions);
         }
-        NodeShardStates nodeShardStates = new NodeShardStates((shardState.getData().values().stream().map(NodeShardState::new).collect(Collectors.toList())));
+        NodeShardStates nodeShardStates = getNodeShardStates(shardState);
         return getAllocationDecision(unassignedShard, allocation, nodeShardStates, logger);
     }
 
+    private static NodeShardStates getNodeShardStates(FetchResult<NodeGatewayStartedShards> shardsState) {
+        NodeShardStates nodeShardStates = new NodeShardStates((o1, o2) -> 1);
+        shardsState.getData().forEach((node, nodeGatewayStartedShard) -> {
+            nodeShardStates.add(new NodeShardState(nodeGatewayStartedShard), node);
+        });
+        return nodeShardStates;
+    }
+
     protected AllocateUnassignedDecision getAllocationDecision(ShardRouting unassignedShard, RoutingAllocation allocation,
-                                                               INodeShardStates shardState, Logger logger) {
+                                                               NodeShardStates shardState, Logger logger) {
         final boolean explain = allocation.debugDecision();
         // don't create a new IndexSetting object for every shard as this could cause a lot of garbage
         // on cluster restart if we allocate a boat load of shards
@@ -281,7 +291,7 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
      */
     private static List<NodeAllocationResult> buildNodeDecisions(
         NodesToAllocate nodesToAllocate,
-        INodeShardStates<? extends INodeShardState, Object> fetchedShardData,
+        NodeShardStates fetchedShardData,
         Set<String> inSyncAllocationIds
     ) {
         List<NodeAllocationResult> nodeResults = new ArrayList<>();
@@ -349,14 +359,14 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
         boolean matchAnyShard,
         Set<String> ignoreNodes,
         Set<String> inSyncAllocationIds,
-        INodeShardStates<? extends INodeShardState, Object> shardState,
+        NodeShardStates shardState,
         Logger logger
     ) {
-        NodeShardStates nodeShardStates = new NodeShardStates();
+        NodeShardStates nodeShardStates = new NodeShardStates(getComparator(matchAnyShard, inSyncAllocationIds));
         int numberOfAllocationsFound = 0;
         Iterator<? extends INodeShardState> iterator = shardState.iterator();
         while (iterator.hasNext()) {
-            NodeShardState nodeShardState = (NodeShardState) iterator.next();
+            INodeShardState nodeShardState = iterator.next();
             DiscoveryNode node = nodeShardState.getNode();
             String allocationId = nodeShardState.getShardState().allocationId();
 
@@ -404,18 +414,16 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
                         + nodeShardState.getShardState().storeException();
                 numberOfAllocationsFound++;
                 if (matchAnyShard || inSyncAllocationIds.contains(nodeShardState.getShardState().allocationId())) {
-                    nodeShardStates.add(nodeShardState);
+                    nodeShardStates.add(nodeShardState, nodeShardState.getNode());
                 }
             }
         }
-
-        nodeShardStates.sort(getComparator(matchAnyShard, inSyncAllocationIds));
 
         if (logger.isTraceEnabled()) {
             logger.trace(
                 "{} candidates for allocation: {}",
                 shard,
-                nodeShardStates.nodeShardStates.stream().map(s -> s.getNode().getName()).collect(Collectors.joining(", "))
+                nodeShardStates.nodeShardStates.values().stream().map(DiscoveryNode::getName).collect(Collectors.joining(", "))
             );
         }
         return new NodeShardsResult(nodeShardStates, numberOfAllocationsFound);
@@ -450,7 +458,7 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
      */
     protected static NodesToAllocate buildNodesToAllocate(
         RoutingAllocation allocation,
-        INodeShardStates nodeShardStates,
+        NodeShardStates nodeShardStates,
         ShardRouting shardRouting,
         boolean forceAllocate
     ) {
@@ -505,53 +513,35 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
         }
     }
 
-    private static class NodeShardStates implements INodeShardStates<NodeShardState, NodeShardState> {
-        List<NodeShardState> nodeShardStates;
+    protected static class NodeShardStates {
+        TreeMap<INodeShardState, DiscoveryNode> nodeShardStates;
 
-        public NodeShardStates() {
-            nodeShardStates = new ArrayList<>();
+        public NodeShardStates(Comparator<INodeShardState> comparator) {
+            this.nodeShardStates = new TreeMap<>(comparator);
         }
 
-        public NodeShardStates(List<NodeShardState> nodeShardStates) {
-            this.nodeShardStates = nodeShardStates;
+        public void add(INodeShardState key, DiscoveryNode value) {
+            this.nodeShardStates.put(key, value);
         }
 
-        @Override
-        public void add(NodeShardState value) {
-            nodeShardStates.add(value);
+        public DiscoveryNode get(INodeShardState key) {
+            return this.nodeShardStates.get(key);
         }
 
-        @Override
-        public void add(NodeShardState key, NodeShardState value) {
-            // ignore the key, just add the value
-            add(value);
-        }
-
-        @Override
-        public NodeShardState get(NodeShardState key) {
-            return nodeShardStates.contains(key) ? key : null;
-        }
-
-        @Override
         public int size() {
-            return nodeShardStates.size();
+            return this.nodeShardStates.size();
         }
 
-        @Override
-        public Iterator<NodeShardState> iterator() {
-            return nodeShardStates.iterator();
-        }
-
-        public void sort(Comparator<INodeShardState> comparator) {
-            nodeShardStates.sort(comparator);
+        public Iterator<INodeShardState> iterator() {
+            return this.nodeShardStates.keySet().iterator();
         }
     }
 
     protected static class NodeShardsResult {
-        final INodeShardStates orderedAllocationCandidates;
+        final NodeShardStates orderedAllocationCandidates;
         final int allocationsFound;
 
-        NodeShardsResult(INodeShardStates orderedAllocationCandidates, int allocationsFound) {
+        NodeShardsResult(NodeShardStates orderedAllocationCandidates, int allocationsFound) {
             this.orderedAllocationCandidates = orderedAllocationCandidates;
             this.allocationsFound = allocationsFound;
         }
