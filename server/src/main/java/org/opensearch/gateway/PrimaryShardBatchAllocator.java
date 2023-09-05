@@ -33,36 +33,25 @@
 package org.opensearch.gateway;
 
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.RecoverySource;
 import org.opensearch.cluster.routing.RoutingNode;
 import org.opensearch.cluster.routing.RoutingNodes;
 import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.UnassignedInfo;
 import org.opensearch.cluster.routing.UnassignedInfo.AllocationStatus;
 import org.opensearch.cluster.routing.allocation.AllocateUnassignedDecision;
 import org.opensearch.cluster.routing.allocation.NodeAllocationResult;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
-import org.opensearch.env.ShardLockObtainFailedException;
 import org.opensearch.gateway.AsyncShardFetch.FetchResult;
 import org.opensearch.gateway.TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch;
 import org.opensearch.gateway.TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShards;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * PrimaryShardBatchAllocator is similar to {@link org.opensearch.gateway.PrimaryShardAllocator} only difference is
@@ -130,7 +119,7 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
             if (matchingShard == null) {
                 matchingShard = shard;
             }
-            AllocateUnassignedDecision decision = skipSnapshotRestore(matchingShard, allocation);
+            AllocateUnassignedDecision decision = getInEligibleShardDecision(matchingShard, allocation);
             if (decision != null) {
                 shardsNotEligibleForFetch.add(shard);
                 shardAllocationDecisions.put(shard, decision);
