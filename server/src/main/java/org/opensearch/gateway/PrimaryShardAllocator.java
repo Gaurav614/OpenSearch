@@ -51,7 +51,6 @@ import org.opensearch.cluster.routing.allocation.decider.Decision.Type;
 import org.opensearch.env.ShardLockObtainFailedException;
 import org.opensearch.gateway.AsyncShardFetch.FetchResult;
 import org.opensearch.gateway.TransportNodesListGatewayStartedShards.NodeGatewayStartedShards;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -60,9 +59,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -101,7 +98,7 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
      * @param allocation      routing allocation object
      * @return allocation decision taken for this shard
      */
-    protected AllocateUnassignedDecision skipSnapshotRestore(ShardRouting unassignedShard, RoutingAllocation allocation) {
+    protected AllocateUnassignedDecision getInEligibleShardDecision(ShardRouting unassignedShard, RoutingAllocation allocation) {
         if (isResponsibleFor(unassignedShard) == false) {
             // this allocator is not responsible for allocating this shard
             return AllocateUnassignedDecision.NOT_TAKEN;
@@ -124,7 +121,7 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
         final RoutingAllocation allocation,
         final Logger logger
     ) {
-        AllocateUnassignedDecision decision = skipSnapshotRestore(unassignedShard, allocation);
+        AllocateUnassignedDecision decision = getInEligibleShardDecision(unassignedShard, allocation);
         if (decision != null) {
             return decision;
         }
