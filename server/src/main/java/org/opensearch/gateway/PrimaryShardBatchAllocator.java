@@ -48,6 +48,7 @@ import org.opensearch.env.ShardLockObtainFailedException;
 import org.opensearch.gateway.AsyncShardFetch.FetchResult;
 import org.opensearch.gateway.TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch;
 import org.opensearch.gateway.TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShards;
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -172,9 +173,9 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
     }
 
     private static NodeShardStates getNodeShardStates(ShardRouting unassignedShard, FetchResult<NodeGatewayStartedShardsBatch> shardsState) {
-        NodeShardStates nodeShardStates = new NodeShardStates(new Comparator<INodeShardState>() {
+        NodeShardStates nodeShardStates = new NodeShardStates(new Comparator<NodeShardState>() {
             @Override
-            public int compare(INodeShardState o1, INodeShardState o2) {
+            public int compare(NodeShardState o1, NodeShardState o2) {
                 return 1;
             }
         });
@@ -182,143 +183,9 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
 
         // build data for a shard from all the nodes
         nodeResponses.forEach((node, nodeGatewayStartedShardsBatch) -> {
-            nodeShardStates.add(new NodeShardState(nodeGatewayStartedShardsBatch.getNodeGatewayStartedShardsBatch().get(unassignedShard.shardId()), node), node);
+            NodeGatewayStartedShards shardData = nodeGatewayStartedShardsBatch.getNodeGatewayStartedShardsBatch().get(unassignedShard.shardId());
+            nodeShardStates.add(new NodeShardState(node, shardData.allocationId(), shardData.primary(), shardData.replicationCheckpoint(), shardData.storeException()), node);
         });
         return nodeShardStates;
-    }
-
-    /**
-     * Builds a list of nodes. If matchAnyShard is set to false, only nodes that have an allocation id matching
-     * inSyncAllocationIds are added to the list. Otherwise, any node that has a shard is added to the list, but
-     * entries with matching allocation id are always at the front of the list.
-     */
-    @Override
-    protected NodeShardsResult buildNodeShardsResult(
-        ShardRouting shard,
-        boolean matchAnyShard,
-        Set<String> ignoreNodes,
-        Set<String> inSyncAllocationIds,
-        INodeShardStates<? extends INodeShardState, Object> shardState,
-        Logger logger
-    ) {
-        NodeShardStates shardStatesToNode = new NodeShardStates(getComparator(matchAnyShard, inSyncAllocationIds));
-        int numberOfAllocationsFound = 0;
-        Iterator<? extends INodeShardState> iterator = shardState.iterator();
-        while (iterator.hasNext()) {
-            NodeShardState nodeShardState = (NodeShardState) iterator.next();
-            DiscoveryNode node = nodeShardState.getNode();
-            String allocationId = nodeShardState.getShardState().allocationId();
-
-            if (ignoreNodes.contains(node.getId())) {
-                continue;
-            }
-
-            if (nodeShardState.getShardState().storeException() == null) {
-                if (allocationId == null) {
-                    logger.trace("[{}] on node [{}] has no shard state information", shard, node);
-                } else {
-                    logger.trace("[{}] on node [{}] has allocation id [{}]", shard, node, allocationId);
-                }
-            } else {
-                final String finalAllocationId = allocationId;
-                if (nodeShardState.getShardState().storeException() instanceof ShardLockObtainFailedException) {
-                    logger.trace(
-                        () -> new ParameterizedMessage(
-                            "[{}] on node [{}] has allocation id [{}] but the store can not be "
-                                + "opened as it's locked, treating as valid shard",
-                            shard,
-                            node,
-                            finalAllocationId
-                        ),
-                        nodeShardState.getShardState().storeException()
-                    );
-                } else {
-                    logger.trace(
-                        () -> new ParameterizedMessage(
-                            "[{}] on node [{}] has allocation id [{}] but the store can not be " + "opened, treating as no allocation id",
-                            shard,
-                            node,
-                            finalAllocationId
-                        ),
-                        nodeShardState.getShardState().storeException()
-                    );
-                    allocationId = null;
-                }
-            }
-
-            if (allocationId != null) {
-                assert nodeShardState.getShardState().storeException() == null || nodeShardState.getShardState().storeException() instanceof ShardLockObtainFailedException
-                    : "only allow store that can be opened or that throws a ShardLockObtainFailedException while being opened but got a "
-                    + "store throwing "
-                    + nodeShardState.getShardState().storeException();
-                numberOfAllocationsFound++;
-                if (matchAnyShard || inSyncAllocationIds.contains(nodeShardState.getShardState().allocationId())) {
-                    shardStatesToNode.add(nodeShardState, node);
-                }
-            }
-        }
-
-        if (logger.isTraceEnabled()) {
-            Set<DiscoveryNode> nodes = new HashSet<>();
-            shardState.iterator().forEachRemaining(nodeShardState -> nodes.add(nodeShardState.getNode()));
-            logger.trace(
-                "{} candidates for allocation: {}",
-                shard,
-                nodes.stream().map(DiscoveryNode::getName).collect(Collectors.joining(", "))
-            );
-        }
-        return new NodeShardsResult(shardStatesToNode, numberOfAllocationsFound);
-    }
-
-
-    private static class NodeShardState implements INodeShardState {
-        NodeGatewayStartedShards shardState;
-        DiscoveryNode node;
-
-        public NodeShardState(NodeGatewayStartedShards shardState, DiscoveryNode node) {
-            this.shardState = shardState;
-            this.node = node;
-        }
-
-        @Override
-        public BaseNodeGatewayStartedShards getShardState() {
-            return this.shardState;
-        }
-
-        @Override
-        public DiscoveryNode getNode() {
-            return this.node;
-        }
-    }
-
-    private static class NodeShardStates implements INodeShardStates<NodeShardState, DiscoveryNode> {
-        TreeMap<NodeShardState, DiscoveryNode> nodeShardStates;
-
-        public NodeShardStates(Comparator<INodeShardState> comparator) {
-            this.nodeShardStates = new TreeMap<>(comparator);
-        }
-
-        @Override
-        public void add(DiscoveryNode value) {}
-
-        @Override
-        public void add(NodeShardState key, DiscoveryNode value) {
-            this.nodeShardStates.put(key, value);
-        }
-
-        @Override
-        public DiscoveryNode get(NodeShardState key) {
-            return this.nodeShardStates.get(key);
-        }
-
-        @Override
-        public int size() {
-            return this.nodeShardStates.size();
-        }
-
-        @Override
-        public Iterator<NodeShardState> iterator() {
-            return this.nodeShardStates.keySet().iterator();
-        }
     }
 }
