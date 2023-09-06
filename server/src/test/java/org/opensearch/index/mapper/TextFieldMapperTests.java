@@ -33,10 +33,7 @@
 package org.opensearch.index.mapper;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.tests.analysis.CannedTokenStream;
-import org.apache.lucene.tests.analysis.MockSynonymAnalyzer;
 import org.apache.lucene.analysis.StopFilter;
-import org.apache.lucene.tests.analysis.Token;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.core.KeywordAnalyzer;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
@@ -62,13 +59,15 @@ import org.apache.lucene.search.PhraseQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.SynonymQuery;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.tests.analysis.CannedTokenStream;
+import org.apache.lucene.tests.analysis.MockSynonymAnalyzer;
+import org.apache.lucene.tests.analysis.Token;
 import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.Strings;
 import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
+import org.opensearch.core.common.Strings;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.analysis.AnalyzerScope;
 import org.opensearch.index.analysis.CharFilterFactory;
@@ -243,7 +242,7 @@ public class TextFieldMapperTests extends MapperTestCase {
 
     public void testDefaults() throws IOException {
         DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        assertEquals(Strings.toString(fieldMapping(this::minimalMapping)), mapper.mappingSource().toString());
+        assertEquals(fieldMapping(this::minimalMapping).toString(), mapper.mappingSource().toString());
 
         ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
         IndexableField[] fields = doc.rootDoc().getFields("field");
@@ -270,11 +269,45 @@ public class TextFieldMapperTests extends MapperTestCase {
                 b.startObject("subfield").field("type", "long").endObject();
             }
             b.endObject();
+            b.field("store", true);
+            b.field("similarity", "BM25");
+            b.field("index_options", "offsets");
+            b.field("norms", false);
+            b.field("term_vector", "yes");
+            b.field("position_increment_gap", 0);
+            b.startObject("fielddata_frequency_filter");
+            {
+                b.field("min", 0.001);
+                b.field("max", 0.1);
+                b.field("min_segment_size", 500);
+            }
+            b.endObject();
+            b.field("eager_global_ordinals", true);
+            b.field("index_phrases", true);
+            b.startObject("index_prefixes");
+            {
+                b.field("min_chars", 1);
+                b.field("max_chars", 10);
+            }
+            b.endObject();
+            b.startObject("meta");
+            {
+                b.field("unit", "min");
+            }
+            b.endObject();
+            b.startArray("copy_to");
+            {
+                b.value("target");
+            }
+            b.endArray();
         }));
-
         assertEquals(
-            "{\"_doc\":{\"properties\":{\"field\":{\"type\":\"text\",\"fields\":{\"subfield\":{\"type\":\"long\"}},\"fielddata\":true}}}}",
-            Strings.toString(XContentType.JSON, mapperService.documentMapper())
+            "{\"_doc\":{\"properties\":{\"field\":{\"type\":\"text\",\"store\":true,\"fields\":{\"subfield\":{\"type\":\"long\"}},"
+                + "\"copy_to\":[\"target\"],\"meta\":{\"unit\":\"min\"},\"index_options\":\"offsets\",\"term_vector\":\"yes\",\"norms\":false,"
+                + "\"similarity\":\"BM25\",\"eager_global_ordinals\":true,\"position_increment_gap\":0,"
+                + "\"fielddata\":true,\"fielddata_frequency_filter\":{\"min\":0.001,\"max\":0.1,\"min_segment_size\":500},"
+                + "\"index_prefixes\":{\"min_chars\":1,\"max_chars\":10},\"index_phrases\":true}}}}",
+            Strings.toString(MediaTypeRegistry.JSON, mapperService.documentMapper())
         );
     }
 
@@ -308,14 +341,14 @@ public class TextFieldMapperTests extends MapperTestCase {
         supportedOptions.put("positions", IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
         supportedOptions.put("offsets", IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);
 
-        XContentBuilder mapping = XContentFactory.jsonBuilder().startObject().startObject("_doc").startObject("properties");
+        XContentBuilder mapping = MediaTypeRegistry.JSON.contentBuilder().startObject().startObject("_doc").startObject("properties");
         for (String option : supportedOptions.keySet()) {
             mapping.startObject(option).field("type", "text").field("index_options", option).endObject();
         }
         mapping.endObject().endObject().endObject();
 
         DocumentMapper mapper = createDocumentMapper(mapping);
-        String serialized = Strings.toString(XContentType.JSON, mapper);
+        String serialized = Strings.toString(MediaTypeRegistry.JSON, mapper);
         assertThat(serialized, containsString("\"offsets\":{\"type\":\"text\",\"index_options\":\"offsets\"}"));
         assertThat(serialized, containsString("\"freqs\":{\"type\":\"text\",\"index_options\":\"freqs\"}"));
         assertThat(serialized, containsString("\"docs\":{\"type\":\"text\",\"index_options\":\"docs\"}"));
@@ -378,24 +411,24 @@ public class TextFieldMapperTests extends MapperTestCase {
         XContentBuilder mapping = fieldMapping(
             b -> b.field("type", "text").field("analyzer", "standard").field("search_analyzer", "keyword")
         );
-        assertEquals(Strings.toString(mapping), createDocumentMapper(mapping).mappingSource().toString());
+        assertEquals(mapping.toString(), createDocumentMapper(mapping).mappingSource().toString());
 
         // special case: default index analyzer
         mapping = fieldMapping(b -> b.field("type", "text").field("analyzer", "default").field("search_analyzer", "keyword"));
-        assertEquals(Strings.toString(mapping), createDocumentMapper(mapping).mappingSource().toString());
+        assertEquals(mapping.toString(), createDocumentMapper(mapping).mappingSource().toString());
 
         // special case: default search analyzer
         mapping = fieldMapping(b -> b.field("type", "text").field("analyzer", "keyword").field("search_analyzer", "default"));
-        assertEquals(Strings.toString(mapping), createDocumentMapper(mapping).mappingSource().toString());
+        assertEquals(mapping.toString(), createDocumentMapper(mapping).mappingSource().toString());
 
-        XContentBuilder builder = XContentFactory.jsonBuilder();
+        XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder();
         builder.startObject();
         createDocumentMapper(fieldMapping(this::minimalMapping)).toXContent(
             builder,
             new ToXContent.MapParams(Collections.singletonMap("include_defaults", "true"))
         );
         builder.endObject();
-        String mappingString = Strings.toString(builder);
+        String mappingString = builder.toString();
         assertTrue(mappingString.contains("analyzer"));
         assertTrue(mappingString.contains("search_analyzer"));
         assertTrue(mappingString.contains("search_quote_analyzer"));
@@ -408,7 +441,7 @@ public class TextFieldMapperTests extends MapperTestCase {
                 .field("search_analyzer", "standard")
                 .field("search_quote_analyzer", "keyword")
         );
-        assertEquals(Strings.toString(mapping), createDocumentMapper(mapping).mappingSource().toString());
+        assertEquals(mapping.toString(), createDocumentMapper(mapping).mappingSource().toString());
 
         // special case: default index/search analyzer
         mapping = fieldMapping(
@@ -417,7 +450,7 @@ public class TextFieldMapperTests extends MapperTestCase {
                 .field("search_analyzer", "default")
                 .field("search_quote_analyzer", "keyword")
         );
-        assertEquals(Strings.toString(mapping), createDocumentMapper(mapping).mappingSource().toString());
+        assertEquals(mapping.toString(), createDocumentMapper(mapping).mappingSource().toString());
     }
 
     public void testTermVectors() throws IOException {

@@ -37,11 +37,13 @@ import org.opensearch.action.admin.indices.rollover.MaxAgeCondition;
 import org.opensearch.action.admin.indices.rollover.MaxDocsCondition;
 import org.opensearch.action.admin.indices.rollover.MaxSizeCondition;
 import org.opensearch.action.resync.TransportResyncReplicationAction;
-import org.opensearch.core.ParseField;
 import org.opensearch.common.inject.AbstractModule;
-import org.opensearch.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.common.io.stream.NamedWriteableRegistry.Entry;
+import org.opensearch.common.util.FeatureFlags;
+import org.opensearch.core.ParseField;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry.Entry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.index.SegmentReplicationPressureService;
 import org.opensearch.index.mapper.BinaryFieldMapper;
 import org.opensearch.index.mapper.BooleanFieldMapper;
 import org.opensearch.index.mapper.CompletionFieldMapper;
@@ -68,10 +70,11 @@ import org.opensearch.index.mapper.SeqNoFieldMapper;
 import org.opensearch.index.mapper.SourceFieldMapper;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.mapper.VersionFieldMapper;
+import org.opensearch.index.remote.RemoteStorePressureService;
+import org.opensearch.index.seqno.GlobalCheckpointSyncAction;
 import org.opensearch.index.seqno.RetentionLeaseBackgroundSyncAction;
 import org.opensearch.index.seqno.RetentionLeaseSyncAction;
 import org.opensearch.index.seqno.RetentionLeaseSyncer;
-import org.opensearch.index.seqno.GlobalCheckpointSyncAction;
 import org.opensearch.index.shard.PrimaryReplicaSyncer;
 import org.opensearch.indices.cluster.IndicesClusterStateService;
 import org.opensearch.indices.mapper.MapperRegistry;
@@ -286,6 +289,10 @@ public class IndicesModule extends AbstractModule {
         bind(RetentionLeaseBackgroundSyncAction.class).asEagerSingleton();
         bind(RetentionLeaseSyncer.class).asEagerSingleton();
         bind(SegmentReplicationCheckpointPublisher.class).asEagerSingleton();
+        bind(SegmentReplicationPressureService.class).asEagerSingleton();
+        if (FeatureFlags.isEnabled(FeatureFlags.REMOTE_STORE)) {
+            bind(RemoteStorePressureService.class).asEagerSingleton();
+        }
     }
 
     /**

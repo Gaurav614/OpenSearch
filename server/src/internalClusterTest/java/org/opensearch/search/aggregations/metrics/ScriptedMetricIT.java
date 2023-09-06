@@ -36,10 +36,10 @@ import org.opensearch.action.index.IndexRequestBuilder;
 import org.opensearch.action.search.SearchPhaseExecutionException;
 import org.opensearch.action.search.SearchRequestBuilder;
 import org.opensearch.action.search.SearchResponse;
-import org.opensearch.common.bytes.BytesArray;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.common.xcontent.support.XContentMapValues;
+import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.script.MockScriptPlugin;
 import org.opensearch.script.Script;
@@ -332,7 +332,7 @@ public class ScriptedMetricIT extends OpenSearchIntegTestCase {
                     new BytesArray(
                         "{\"script\": {\"lang\": \"" + MockScriptPlugin.NAME + "\"," + " \"source\": \"vars.multiplier = 3\"} }"
                     ),
-                    XContentType.JSON
+                    MediaTypeRegistry.JSON
                 )
         );
 
@@ -345,7 +345,7 @@ public class ScriptedMetricIT extends OpenSearchIntegTestCase {
                     new BytesArray(
                         "{\"script\": {\"lang\": \"" + MockScriptPlugin.NAME + "\"," + " \"source\": \"state.list.add(vars.multiplier)\"} }"
                     ),
-                    XContentType.JSON
+                    MediaTypeRegistry.JSON
                 )
         );
 
@@ -361,7 +361,7 @@ public class ScriptedMetricIT extends OpenSearchIntegTestCase {
                             + "\","
                             + " \"source\": \"sum state values as a new aggregation\"} }"
                     ),
-                    XContentType.JSON
+                    MediaTypeRegistry.JSON
                 )
         );
 
@@ -377,7 +377,7 @@ public class ScriptedMetricIT extends OpenSearchIntegTestCase {
                             + "\","
                             + " \"source\": \"sum all states (lists) values as a new aggregation\"} }"
                     ),
-                    XContentType.JSON
+                    MediaTypeRegistry.JSON
                 )
         );
 
@@ -435,7 +435,9 @@ public class ScriptedMetricIT extends OpenSearchIntegTestCase {
         assertThat(scriptedMetricAggregation.aggregation(), notNullValue());
         assertThat(scriptedMetricAggregation.aggregation(), instanceOf(ArrayList.class));
         List<?> aggregationList = (List<?>) scriptedMetricAggregation.aggregation();
-        assertThat(aggregationList.size(), equalTo(getNumShards("idx").numPrimaries));
+        // with script based aggregation, if it does not support reduce then aggregationList size
+        // will be numShards * slicesCount
+        assertThat(aggregationList.size(), greaterThanOrEqualTo(getNumShards("idx").numPrimaries));
         int numShardsRun = 0;
         for (Object object : aggregationList) {
             assertThat(object, notNullValue());
@@ -483,7 +485,9 @@ public class ScriptedMetricIT extends OpenSearchIntegTestCase {
         assertThat(scriptedMetricAggregation.aggregation(), notNullValue());
         assertThat(scriptedMetricAggregation.aggregation(), instanceOf(ArrayList.class));
         List<?> aggregationList = (List<?>) scriptedMetricAggregation.aggregation();
-        assertThat(aggregationList.size(), equalTo(getNumShards("idx").numPrimaries));
+        // with script based aggregation, if it does not support reduce then aggregationList size
+        // will be numShards * slicesCount
+        assertThat(aggregationList.size(), greaterThanOrEqualTo(getNumShards("idx").numPrimaries));
         int numShardsRun = 0;
         for (Object object : aggregationList) {
             assertThat(object, notNullValue());
@@ -535,7 +539,9 @@ public class ScriptedMetricIT extends OpenSearchIntegTestCase {
         assertThat(scriptedMetricAggregation.aggregation(), notNullValue());
         assertThat(scriptedMetricAggregation.aggregation(), instanceOf(ArrayList.class));
         List<?> aggregationList = (List<?>) scriptedMetricAggregation.aggregation();
-        assertThat(aggregationList.size(), equalTo(getNumShards("idx").numPrimaries));
+        // with script based aggregation, if it does not support reduce then aggregationList size
+        // will be numShards * slicesCount
+        assertThat(aggregationList.size(), greaterThanOrEqualTo(getNumShards("idx").numPrimaries));
         long totalCount = 0;
         for (Object object : aggregationList) {
             assertThat(object, notNullValue());
@@ -588,7 +594,9 @@ public class ScriptedMetricIT extends OpenSearchIntegTestCase {
         assertThat(scriptedMetricAggregation.aggregation(), notNullValue());
         assertThat(scriptedMetricAggregation.aggregation(), instanceOf(ArrayList.class));
         List<?> aggregationList = (List<?>) scriptedMetricAggregation.aggregation();
-        assertThat(aggregationList.size(), equalTo(getNumShards("idx").numPrimaries));
+        // with script based aggregation, if it does not support reduce then aggregationList size
+        // will be numShards * slicesCount
+        assertThat(aggregationList.size(), greaterThanOrEqualTo(getNumShards("idx").numPrimaries));
         long totalCount = 0;
         for (Object object : aggregationList) {
             assertThat(object, notNullValue());
@@ -651,7 +659,9 @@ public class ScriptedMetricIT extends OpenSearchIntegTestCase {
         assertThat(scriptedMetricAggregation.aggregation(), notNullValue());
         assertThat(scriptedMetricAggregation.aggregation(), instanceOf(ArrayList.class));
         List<?> aggregationList = (List<?>) scriptedMetricAggregation.aggregation();
-        assertThat(aggregationList.size(), equalTo(getNumShards("idx").numPrimaries));
+        // with script based aggregation, if it does not support reduce then aggregationList size
+        // will be numShards * slicesCount
+        assertThat(aggregationList.size(), greaterThanOrEqualTo(getNumShards("idx").numPrimaries));
         long totalCount = 0;
         for (Object object : aggregationList) {
             assertThat(object, notNullValue());

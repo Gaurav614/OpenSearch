@@ -32,10 +32,11 @@
 
 package org.opensearch.search.sort;
 
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.tests.util.TestUtil;
-import org.apache.lucene.util.UnicodeUtil;
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 
+import org.apache.lucene.tests.util.TestUtil;
+import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.UnicodeUtil;
 import org.opensearch.OpenSearchException;
 import org.opensearch.action.admin.indices.alias.Alias;
 import org.opensearch.action.bulk.BulkRequestBuilder;
@@ -44,27 +45,29 @@ import org.opensearch.action.search.SearchPhaseExecutionException;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.common.Numbers;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.fielddata.ScriptDocValues;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.functionscore.ScoreFunctionBuilders;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.plugins.Plugin;
-import org.opensearch.rest.RestStatus;
 import org.opensearch.script.MockScriptPlugin;
 import org.opensearch.script.Script;
 import org.opensearch.script.ScriptType;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
-import org.opensearch.test.OpenSearchIntegTestCase;
 import org.opensearch.test.InternalSettingsPlugin;
-
+import org.opensearch.test.ParameterizedOpenSearchIntegTestCase;
 import org.hamcrest.Matchers;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -86,6 +89,7 @@ import static org.opensearch.index.query.QueryBuilders.functionScoreQuery;
 import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
 import static org.opensearch.index.query.functionscore.ScoreFunctionBuilders.fieldValueFactorFunction;
 import static org.opensearch.script.MockScriptPlugin.NAME;
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFirstHit;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
@@ -103,8 +107,26 @@ import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.oneOf;
 
-public class FieldSortIT extends OpenSearchIntegTestCase {
+public class FieldSortIT extends ParameterizedOpenSearchIntegTestCase {
+    public FieldSortIT(Settings dynamicSettings) {
+        super(dynamicSettings);
+    }
+
+    @ParametersFactory
+    public static Collection<Object[]> parameters() {
+        return Arrays.asList(
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
+        );
+    }
+
+    @Override
+    protected Settings featureFlagSettings() {
+        return Settings.builder().put(super.featureFlagSettings()).put(FeatureFlags.CONCURRENT_SEGMENT_SEARCH, "true").build();
+    }
+
     public static class CustomScriptPlugin extends MockScriptPlugin {
         @Override
         protected Map<String, Function<Map<String, Object>, Object>> pluginScripts() {
@@ -142,7 +164,7 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
                 assertAcked(prepareCreate("test_" + i).addAlias(new Alias("test")));
             }
             if (i > 0) {
-                client().prepareIndex("test_" + i).setId("" + i).setSource("{\"entry\": " + i + "}", XContentType.JSON).get();
+                client().prepareIndex("test_" + i).setId("" + i).setSource("{\"entry\": " + i + "}", MediaTypeRegistry.JSON).get();
             }
         }
         refresh();
@@ -494,9 +516,9 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
     public void testIssue2986() {
         assertAcked(client().admin().indices().prepareCreate("test").setMapping("field1", "type=keyword").get());
 
-        client().prepareIndex("test").setId("1").setSource("{\"field1\":\"value1\"}", XContentType.JSON).get();
-        client().prepareIndex("test").setId("2").setSource("{\"field1\":\"value2\"}", XContentType.JSON).get();
-        client().prepareIndex("test").setId("3").setSource("{\"field1\":\"value3\"}", XContentType.JSON).get();
+        client().prepareIndex("test").setId("1").setSource("{\"field1\":\"value1\"}", MediaTypeRegistry.JSON).get();
+        client().prepareIndex("test").setId("2").setSource("{\"field1\":\"value2\"}", MediaTypeRegistry.JSON).get();
+        client().prepareIndex("test").setId("3").setSource("{\"field1\":\"value3\"}", MediaTypeRegistry.JSON).get();
         refresh();
         SearchResponse result = client().prepareSearch("test")
             .setQuery(matchAllQuery())
@@ -577,6 +599,9 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
                     .startObject("long_value")
                     .field("type", "long")
                     .endObject()
+                    .startObject("unsigned_long_value")
+                    .field("type", "unsigned_long")
+                    .endObject()
                     .startObject("float_value")
                     .field("type", "float")
                     .endObject()
@@ -588,6 +613,7 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
             )
         );
         ensureGreen();
+        BigInteger UNSIGNED_LONG_BASE = Numbers.MAX_UNSIGNED_LONG_VALUE.subtract(BigInteger.valueOf(100000));
         List<IndexRequestBuilder> builders = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             IndexRequestBuilder builder = client().prepareIndex("test")
@@ -600,6 +626,7 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
                         .field("short_value", i)
                         .field("integer_value", i)
                         .field("long_value", i)
+                        .field("unsigned_long_value", UNSIGNED_LONG_BASE.add(BigInteger.valueOf(10000 * i)))
                         .field("float_value", 0.1 * i)
                         .field("double_value", 0.1 * i)
                         .endObject()
@@ -622,7 +649,6 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
 
         // STRING
         int size = 1 + random.nextInt(10);
-
         SearchResponse searchResponse = client().prepareSearch()
             .setQuery(matchAllQuery())
             .setSize(size)
@@ -791,6 +817,45 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
         }
 
         assertNoFailures(searchResponse);
+
+        // UNSIGNED_LONG
+        size = 1 + random.nextInt(10);
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .setSize(size)
+            .addSort("unsigned_long_value", SortOrder.ASC)
+            .get();
+
+        assertHitCount(searchResponse, 10);
+        assertThat(searchResponse.getHits().getHits().length, equalTo(size));
+        for (int i = 0; i < size; i++) {
+            assertThat(searchResponse.getHits().getAt(i).getId(), equalTo(Integer.toString(i)));
+            assertThat(
+                ((Number) searchResponse.getHits().getAt(i).getSortValues()[0]),
+                equalTo(UNSIGNED_LONG_BASE.add(BigInteger.valueOf(10000 * i)))
+            );
+        }
+
+        assertThat(searchResponse.toString(), not(containsString("error")));
+        size = 1 + random.nextInt(10);
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .setSize(size)
+            .addSort("unsigned_long_value", SortOrder.DESC)
+            .get();
+        assertHitCount(searchResponse, 10L);
+        assertHitCount(searchResponse, 10);
+        assertThat(searchResponse.getHits().getHits().length, equalTo(size));
+        for (int i = 0; i < size; i++) {
+            assertThat(searchResponse.getHits().getAt(i).getId(), equalTo(Integer.toString(9 - i)));
+            assertThat(
+                ((Number) searchResponse.getHits().getAt(i).getSortValues()[0]),
+                equalTo(UNSIGNED_LONG_BASE.add(BigInteger.valueOf(10000 * (9 - i))))
+            );
+        }
+
+        assertThat(searchResponse.toString(), not(containsString("error")));
+        assertNoFailures(searchResponse);
     }
 
     public void testSortMissingNumbers() throws Exception {
@@ -805,6 +870,9 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
                     .startObject("d_value")
                     .field("type", "float")
                     .endObject()
+                    .startObject("u_value")
+                    .field("type", "unsigned_long")
+                    .endObject()
                     .endObject()
                     .endObject()
             )
@@ -812,19 +880,24 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
         ensureGreen();
         client().prepareIndex("test")
             .setId("1")
-            .setSource(jsonBuilder().startObject().field("id", "1").field("i_value", -1).field("d_value", -1.1).endObject())
+            .setSource(
+                jsonBuilder().startObject().field("id", "1").field("i_value", -1).field("d_value", -1.1).field("u_value", 1).endObject()
+            )
             .get();
 
         client().prepareIndex("test").setId("2").setSource(jsonBuilder().startObject().field("id", "2").endObject()).get();
 
         client().prepareIndex("test")
             .setId("3")
-            .setSource(jsonBuilder().startObject().field("id", "1").field("i_value", 2).field("d_value", 2.2).endObject())
+            .setSource(
+                jsonBuilder().startObject().field("id", "3").field("i_value", 2).field("d_value", 2.2).field("u_value", 2).endObject()
+            )
             .get();
 
         flush();
         refresh();
 
+        // DOUBLE
         logger.info("--> sort with no missing (same as missing _last)");
         SearchResponse searchResponse = client().prepareSearch()
             .setQuery(matchAllQuery())
@@ -859,6 +932,247 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
         assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
         assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("2"));
         assertThat(searchResponse.getHits().getAt(1).getId(), equalTo("1"));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("3"));
+
+        // FLOAT
+        logger.info("--> sort with no missing (same as missing _last)");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("d_value").order(SortOrder.ASC))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
+        assertThat(searchResponse.getHits().getAt(1).getId(), equalTo("3"));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("2"));
+
+        logger.info("--> sort with missing _last");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("d_value").order(SortOrder.ASC).missing("_last"))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
+        assertThat(searchResponse.getHits().getAt(1).getId(), equalTo("3"));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("2"));
+
+        logger.info("--> sort with missing _first");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("d_value").order(SortOrder.ASC).missing("_first"))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("2"));
+        assertThat(searchResponse.getHits().getAt(1).getId(), equalTo("1"));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("3"));
+
+        // UNSIGNED_LONG
+        logger.info("--> sort with no missing (same as missing _last)");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("u_value").order(SortOrder.ASC))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
+        assertThat(searchResponse.getHits().getAt(1).getId(), equalTo("3"));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("2"));
+
+        logger.info("--> sort with missing _last");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("u_value").order(SortOrder.ASC).missing("_last"))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
+        assertThat(searchResponse.getHits().getAt(1).getId(), equalTo("3"));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("2"));
+
+        logger.info("--> sort with missing _first");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("u_value").order(SortOrder.ASC).missing("_first"))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("2"));
+        assertThat(searchResponse.getHits().getAt(1).getId(), equalTo("1"));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("3"));
+    }
+
+    public void testSortMissingNumbersMinMax() throws Exception {
+        assertAcked(
+            prepareCreate("test").setMapping(
+                XContentFactory.jsonBuilder()
+                    .startObject()
+                    .startObject("properties")
+                    .startObject("l_value")
+                    .field("type", "long")
+                    .endObject()
+                    .startObject("d_value")
+                    .field("type", "float")
+                    .endObject()
+                    .startObject("u_value")
+                    .field("type", "unsigned_long")
+                    .endObject()
+                    .endObject()
+                    .endObject()
+            )
+        );
+        ensureGreen();
+        client().prepareIndex("test")
+            .setId("1")
+            .setSource(
+                jsonBuilder().startObject()
+                    .field("id", "1")
+                    .field("l_value", Long.MIN_VALUE)
+                    .field("d_value", Float.MIN_VALUE)
+                    .field("u_value", Numbers.MIN_UNSIGNED_LONG_VALUE)
+                    .endObject()
+            )
+            .get();
+
+        client().prepareIndex("test").setId("2").setSource(jsonBuilder().startObject().field("id", "2").endObject()).get();
+
+        client().prepareIndex("test")
+            .setId("3")
+            .setSource(
+                jsonBuilder().startObject()
+                    .field("id", "3")
+                    .field("l_value", Long.MAX_VALUE)
+                    .field("d_value", Float.MAX_VALUE)
+                    .field("u_value", Numbers.MAX_UNSIGNED_LONG_VALUE)
+                    .endObject()
+            )
+            .get();
+
+        flush();
+        refresh();
+
+        // LONG
+        logger.info("--> sort with no missing (same as missing _last)");
+        SearchResponse searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("l_value").order(SortOrder.ASC))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
+        // The order here could be unstable (depends on document order) since missing == field value
+        assertThat(searchResponse.getHits().getAt(1).getId(), is(oneOf("3", "2")));
+        assertThat(searchResponse.getHits().getAt(2).getId(), is(oneOf("2", "3")));
+
+        logger.info("--> sort with missing _last");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("l_value").order(SortOrder.ASC).missing("_last"))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
+        // The order here could be unstable (depends on document order) since missing == field value
+        assertThat(searchResponse.getHits().getAt(1).getId(), is(oneOf("3", "2")));
+        assertThat(searchResponse.getHits().getAt(2).getId(), is(oneOf("2", "3")));
+
+        logger.info("--> sort with missing _first");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("l_value").order(SortOrder.ASC).missing("_first"))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        // The order here could be unstable (depends on document order) since missing == field value
+        assertThat(searchResponse.getHits().getAt(0).getId(), is(oneOf("2", "1")));
+        assertThat(searchResponse.getHits().getAt(1).getId(), is(oneOf("1", "2")));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("3"));
+
+        // FLOAT
+        logger.info("--> sort with no missing (same as missing _last)");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("d_value").order(SortOrder.ASC))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
+        assertThat(searchResponse.getHits().getAt(1).getId(), equalTo("3"));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("2"));
+
+        logger.info("--> sort with missing _last");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("d_value").order(SortOrder.ASC).missing("_last"))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
+        assertThat(searchResponse.getHits().getAt(1).getId(), equalTo("3"));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("2"));
+
+        logger.info("--> sort with missing _first");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("d_value").order(SortOrder.ASC).missing("_first"))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("2"));
+        assertThat(searchResponse.getHits().getAt(1).getId(), equalTo("1"));
+        assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("3"));
+
+        // UNSIGNED_LONG
+        logger.info("--> sort with no missing (same as missing _last)");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("u_value").order(SortOrder.ASC))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
+        // The order here could be unstable (depends on document order) since missing == field value
+        assertThat(searchResponse.getHits().getAt(1).getId(), is(oneOf("3", "2")));
+        assertThat(searchResponse.getHits().getAt(2).getId(), is(oneOf("2", "3")));
+
+        logger.info("--> sort with missing _last");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("u_value").order(SortOrder.ASC).missing("_last"))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
+        // The order here could be unstable (depends on document order) since missing == field value
+        assertThat(searchResponse.getHits().getAt(1).getId(), is(oneOf("3", "2")));
+        assertThat(searchResponse.getHits().getAt(2).getId(), is(oneOf("2", "3")));
+
+        logger.info("--> sort with missing _first");
+        searchResponse = client().prepareSearch()
+            .setQuery(matchAllQuery())
+            .addSort(SortBuilders.fieldSort("u_value").order(SortOrder.ASC).missing("_first"))
+            .get();
+        assertNoFailures(searchResponse);
+
+        assertThat(searchResponse.getHits().getTotalHits().value, equalTo(3L));
+        // The order here could be unstable (depends on document order) since missing == field value
+        assertThat(searchResponse.getHits().getAt(0).getId(), is(oneOf("2", "1")));
+        assertThat(searchResponse.getHits().getAt(1).getId(), is(oneOf("1", "2")));
         assertThat(searchResponse.getHits().getAt(2).getId(), equalTo("3"));
     }
 
@@ -1964,7 +2278,7 @@ public class FieldSortIT extends OpenSearchIntegTestCase {
                 bulkBuilder = client().prepareBulk();
             }
             String source = "{\"long_field\":" + randomLong() + "}";
-            bulkBuilder.add(client().prepareIndex("test1").setId(Integer.toString(i)).setSource(source, XContentType.JSON));
+            bulkBuilder.add(client().prepareIndex("test1").setId(Integer.toString(i)).setSource(source, MediaTypeRegistry.JSON));
         }
         refresh();
 

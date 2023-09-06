@@ -44,6 +44,7 @@ import org.opensearch.index.fielddata.fieldcomparator.DoubleValuesComparatorSour
 import org.opensearch.index.fielddata.fieldcomparator.FloatValuesComparatorSource;
 import org.opensearch.index.fielddata.fieldcomparator.IntValuesComparatorSource;
 import org.opensearch.index.fielddata.fieldcomparator.LongValuesComparatorSource;
+import org.opensearch.index.fielddata.fieldcomparator.UnsignedLongValuesComparatorSource;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.MultiValueMode;
 import org.opensearch.search.aggregations.support.CoreValuesSourceType;
@@ -75,7 +76,8 @@ public abstract class IndexNumericFieldData implements IndexFieldData<LeafNumeri
         DATE_NANOSECONDS(false, SortField.Type.LONG, CoreValuesSourceType.DATE),
         HALF_FLOAT(true, SortField.Type.LONG, CoreValuesSourceType.NUMERIC),
         FLOAT(true, SortField.Type.FLOAT, CoreValuesSourceType.NUMERIC),
-        DOUBLE(true, SortField.Type.DOUBLE, CoreValuesSourceType.NUMERIC);
+        DOUBLE(true, SortField.Type.DOUBLE, CoreValuesSourceType.NUMERIC),
+        UNSIGNED_LONG(false, SortField.Type.LONG, CoreValuesSourceType.NUMERIC);
 
         private final boolean floatingPoint;
         private final ValuesSourceType valuesSourceType;
@@ -196,22 +198,35 @@ public abstract class IndexNumericFieldData implements IndexFieldData<LeafNumeri
         MultiValueMode sortMode,
         Nested nested
     ) {
+        final XFieldComparatorSource source;
         switch (targetNumericType) {
             case HALF_FLOAT:
             case FLOAT:
-                return new FloatValuesComparatorSource(this, missingValue, sortMode, nested);
+                source = new FloatValuesComparatorSource(this, missingValue, sortMode, nested);
+                break;
             case DOUBLE:
-                return new DoubleValuesComparatorSource(this, missingValue, sortMode, nested);
+                source = new DoubleValuesComparatorSource(this, missingValue, sortMode, nested);
+                break;
+            case UNSIGNED_LONG:
+                source = new UnsignedLongValuesComparatorSource(this, missingValue, sortMode, nested);
+                break;
             case DATE:
-                return dateComparatorSource(missingValue, sortMode, nested);
+                source = dateComparatorSource(missingValue, sortMode, nested);
+                break;
             case DATE_NANOSECONDS:
-                return dateNanosComparatorSource(missingValue, sortMode, nested);
+                source = dateNanosComparatorSource(missingValue, sortMode, nested);
+                break;
             case LONG:
-                return new LongValuesComparatorSource(this, missingValue, sortMode, nested);
+                source = new LongValuesComparatorSource(this, missingValue, sortMode, nested);
+                break;
             default:
                 assert !targetNumericType.isFloatingPoint();
-                return new IntValuesComparatorSource(this, missingValue, sortMode, nested);
+                source = new IntValuesComparatorSource(this, missingValue, sortMode, nested);
         }
+        if (targetNumericType != getNumericType()) {
+            source.disableSkipping(); // disable skipping logic for caste of sort field
+        }
+        return source;
     }
 
     protected XFieldComparatorSource dateComparatorSource(@Nullable Object missingValue, MultiValueMode sortMode, Nested nested) {

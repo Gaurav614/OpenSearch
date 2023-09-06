@@ -32,7 +32,6 @@
 
 package org.opensearch.action.search;
 
-import org.opensearch.action.ActionListener;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksRequest;
 import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsGroup;
@@ -57,20 +56,22 @@ import org.opensearch.cluster.routing.OperationRouting;
 import org.opensearch.cluster.routing.ShardIterator;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.Nullable;
-import org.opensearch.common.Strings;
-import org.opensearch.common.breaker.CircuitBreaker;
 import org.opensearch.common.inject.Inject;
-import org.opensearch.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.common.io.stream.Writeable;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Setting.Property;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.concurrent.AtomicArray;
 import org.opensearch.common.util.concurrent.CountDown;
-import org.opensearch.index.Index;
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.Strings;
+import org.opensearch.core.common.breaker.CircuitBreaker;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.core.index.Index;
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+import org.opensearch.core.tasks.TaskId;
 import org.opensearch.index.query.Rewriteable;
-import org.opensearch.index.shard.ShardId;
-import org.opensearch.indices.breaker.CircuitBreakerService;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.SearchService;
 import org.opensearch.search.SearchShardTarget;
@@ -80,12 +81,12 @@ import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.AliasFilter;
 import org.opensearch.search.internal.InternalSearchResponse;
 import org.opensearch.search.internal.SearchContext;
+import org.opensearch.search.pipeline.PipelinedRequest;
 import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.search.profile.ProfileShardResult;
 import org.opensearch.search.profile.SearchProfileShardResults;
 import org.opensearch.tasks.CancellableTask;
 import org.opensearch.tasks.Task;
-import org.opensearch.tasks.TaskId;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.RemoteClusterAware;
 import org.opensearch.transport.RemoteClusterService;
@@ -389,18 +390,18 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             relativeStartNanos,
             System::nanoTime
         );
-        SearchRequest searchRequest;
+        PipelinedRequest searchRequest;
+        ActionListener<SearchResponse> listener;
         try {
-            searchRequest = searchPipelineService.transformRequest(originalSearchRequest);
+            searchRequest = searchPipelineService.resolvePipeline(originalSearchRequest);
+            listener = ActionListener.wrap(
+                r -> originalListener.onResponse(searchRequest.transformResponse(r)),
+                originalListener::onFailure
+            );
         } catch (Exception e) {
             originalListener.onFailure(e);
-            throw new RuntimeException(e);
+            return;
         }
-        ActionListener<SearchResponse> listener = ActionListener.wrap(
-            // TODO: Should we transform responses with the original request or the transformed request? Or both?
-            r -> originalListener.onResponse(searchPipelineService.transformResponse(originalSearchRequest, r)),
-            originalListener::onFailure
-        );
 
         ActionListener<SearchSourceBuilder> rewriteListener = ActionListener.wrap(source -> {
             if (source != searchRequest.source()) {
@@ -441,7 +442,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                         localIndices,
                         remoteClusterIndices,
                         timeProvider,
-                        searchService.aggReduceContextBuilder(searchRequest),
+                        searchService.aggReduceContextBuilder(searchRequest.source()),
                         remoteClusterService,
                         threadPool,
                         listener,

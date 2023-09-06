@@ -34,12 +34,13 @@ package org.opensearch.cluster.node;
 
 import org.opensearch.Version;
 import org.opensearch.common.UUIDs;
-import org.opensearch.common.io.stream.StreamInput;
-import org.opensearch.common.io.stream.StreamOutput;
-import org.opensearch.common.io.stream.Writeable;
+import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.transport.TransportAddress;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.core.common.transport.TransportAddress;
 import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.node.Node;
@@ -64,8 +65,9 @@ import static org.opensearch.node.NodeRoleSettings.NODE_ROLES_SETTING;
 /**
  * A discovery node represents a node that is part of the cluster.
  *
- * @opensearch.internal
+ * @opensearch.api
  */
+@PublicApi(since = "1.0.0")
 public class DiscoveryNode implements Writeable, ToXContentFragment {
 
     static final String COORDINATING_ONLY = "coordinating_only";
@@ -344,7 +346,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
             }
         }
         this.roles = Collections.unmodifiableSortedSet(new TreeSet<>(roles));
-        this.version = Version.readVersion(in);
+        this.version = in.readVersion();
     }
 
     @Override
@@ -367,7 +369,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
             out.writeString(compatibleRole.roleNameAbbreviation());
             out.writeBoolean(compatibleRole.canContainData());
         }
-        Version.writeVersion(version, out);
+        out.writeVersion(version);
     }
 
     /**

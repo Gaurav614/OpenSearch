@@ -38,16 +38,16 @@ import org.opensearch.action.ActionRequestValidationException;
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.action.support.IndicesOptions;
 import org.opensearch.common.Nullable;
-import org.opensearch.common.Strings;
-import org.opensearch.common.io.stream.StreamInput;
-import org.opensearch.common.io.stream.StreamOutput;
 import org.opensearch.common.unit.TimeValue;
+import org.opensearch.core.common.Strings;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.tasks.TaskId;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.search.Scroll;
 import org.opensearch.search.builder.PointInTimeBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.SearchContext;
-import org.opensearch.tasks.TaskId;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -432,7 +432,8 @@ public class SearchRequest extends ActionRequest implements IndicesRequest.Repla
 
     /**
      * Sets the preference to execute the search. Defaults to randomize across shards. Can be set to
-     * {@code _local} to prefer local shards or a custom value, which guarantees that the same order
+     * {@code _local} to prefer local shards, {@code _primary} to execute only on primary shards,
+     * or a custom value, which guarantees that the same order
      * will be used across different requests.
      */
     public SearchRequest preference(String preference) {

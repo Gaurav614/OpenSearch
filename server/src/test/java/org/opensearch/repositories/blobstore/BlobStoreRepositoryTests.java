@@ -41,7 +41,8 @@ import org.opensearch.cluster.metadata.RepositoryMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.UUIDs;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.ByteSizeUnit;
+import org.opensearch.common.util.FeatureFlags;
+import org.opensearch.core.common.unit.ByteSizeUnit;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.indices.recovery.RecoverySettings;
@@ -57,7 +58,6 @@ import org.opensearch.repositories.fs.FsRepository;
 import org.opensearch.snapshots.SnapshotId;
 import org.opensearch.snapshots.SnapshotState;
 import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
 
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -75,7 +75,7 @@ import static org.hamcrest.Matchers.nullValue;
 /**
  * Tests for the {@link BlobStoreRepository} and its subclasses.
  */
-public class BlobStoreRepositoryTests extends OpenSearchSingleNodeTestCase {
+public class BlobStoreRepositoryTests extends BlobStoreRepositoryHelperTests {
 
     static final String REPO_TYPE = "fsLike";
 
@@ -103,6 +103,11 @@ public class BlobStoreRepositoryTests extends OpenSearchSingleNodeTestCase {
                 }
             );
         }
+    }
+
+    @Override
+    protected Settings featureFlagSettings() {
+        return Settings.builder().put(super.featureFlagSettings()).put(FeatureFlags.REMOTE_STORE, "true").build();
     }
 
     public void testRetrieveSnapshots() throws Exception {

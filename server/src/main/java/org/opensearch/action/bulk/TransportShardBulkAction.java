@@ -37,7 +37,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.MessageSupplier;
 import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.ActionListener;
 import org.opensearch.action.ActionListenerResponseHandler;
 import org.opensearch.action.ActionRunnable;
 import org.opensearch.action.DocWriteRequest;
@@ -67,19 +66,23 @@ import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.routing.AllocationId;
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.bytes.BytesReference;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.inject.Inject;
-import org.opensearch.common.io.stream.StreamInput;
-import org.opensearch.common.io.stream.StreamOutput;
 import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.core.tasks.TaskId;
+import org.opensearch.core.xcontent.MediaType;
+import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.index.IndexingPressureService;
 import org.opensearch.index.SegmentReplicationPressureService;
 import org.opensearch.index.engine.Engine;
@@ -88,16 +91,15 @@ import org.opensearch.index.get.GetResult;
 import org.opensearch.index.mapper.MapperException;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.SourceToParse;
+import org.opensearch.index.remote.RemoteStorePressureService;
 import org.opensearch.index.seqno.SequenceNumbers;
 import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.ShardId;
 import org.opensearch.index.shard.ShardNotFoundException;
 import org.opensearch.index.translog.Translog;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.SystemIndices;
 import org.opensearch.node.NodeClosedException;
 import org.opensearch.tasks.Task;
-import org.opensearch.tasks.TaskId;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.threadpool.ThreadPool.Names;
 import org.opensearch.transport.TransportChannel;
@@ -135,6 +137,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
     private final UpdateHelper updateHelper;
     private final MappingUpdatedAction mappingUpdatedAction;
     private final SegmentReplicationPressureService segmentReplicationPressureService;
+    private final RemoteStorePressureService remoteStorePressureService;
 
     /**
      * This action is used for performing primary term validation. With remote translog enabled, the translogs would
@@ -158,6 +161,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
         ActionFilters actionFilters,
         IndexingPressureService indexingPressureService,
         SegmentReplicationPressureService segmentReplicationPressureService,
+        RemoteStorePressureService remoteStorePressureService,
         SystemIndices systemIndices
     ) {
         super(
@@ -179,6 +183,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
         this.updateHelper = updateHelper;
         this.mappingUpdatedAction = mappingUpdatedAction;
         this.segmentReplicationPressureService = segmentReplicationPressureService;
+        this.remoteStorePressureService = remoteStorePressureService;
 
         this.transportPrimaryTermValidationAction = ACTION_NAME + "[validate_primary_term]";
 
@@ -528,8 +533,15 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
 
     @Override
     protected Releasable checkPrimaryLimits(BulkShardRequest request, boolean rerouteWasLocal, boolean localRerouteInitiatedByNodeClient) {
-        if (force(request) == false && segmentReplicationPressureService.isSegmentReplicationBackpressureEnabled()) {
-            segmentReplicationPressureService.isSegrepLimitBreached(request.shardId());
+        if (force(request) == false) {
+            if (segmentReplicationPressureService.isSegmentReplicationBackpressureEnabled()) {
+                segmentReplicationPressureService.isSegrepLimitBreached(request.shardId());
+            }
+            // TODO - While removing remote store flag, this can be encapsulated to single class with common interface for backpressure
+            // service
+            if (FeatureFlags.isEnabled(FeatureFlags.REMOTE_STORE) && remoteStorePressureService.isSegmentsUploadBackpressureEnabled()) {
+                remoteStorePressureService.validateSegmentsUploadLag(request.shardId());
+            }
         }
         return super.checkPrimaryLimits(request, rerouteWasLocal, localRerouteInitiatedByNodeClient);
     }
@@ -739,7 +751,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
 
                 if (updateRequest.fetchSource() != null && updateRequest.fetchSource().fetchSource()) {
                     final BytesReference indexSourceAsBytes = updateIndexRequest.source();
-                    final Tuple<XContentType, Map<String, Object>> sourceAndContent = XContentHelper.convertToMap(
+                    final Tuple<? extends MediaType, Map<String, Object>> sourceAndContent = XContentHelper.convertToMap(
                         indexSourceAsBytes,
                         true,
                         updateIndexRequest.getContentType()
@@ -857,6 +869,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                     indexRequest.routing()
                 );
                 result = replica.applyIndexOperationOnReplica(
+                    primaryResponse.getId(),
                     primaryResponse.getSeqNo(),
                     primaryResponse.getPrimaryTerm(),
                     primaryResponse.getVersion(),

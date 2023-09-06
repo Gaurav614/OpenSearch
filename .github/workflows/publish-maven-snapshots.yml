@@ -5,11 +5,12 @@ on:
   push:
       branches:
         - main
-        - '1.3'
-        - 2.x
+        - '[0-9]+.[0-9]+'
+        - '[0-9]+.x'
 
 jobs:
   build-and-publish-snapshots:
+    if: github.repository == 'opensearch-project/OpenSearch'
     runs-on: ubuntu-latest
 
     permissions:
@@ -25,7 +26,7 @@ jobs:
           java-version: 17
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: ${{ secrets.PUBLISH_SNAPSHOTS_ROLE }}
           aws-region: us-east-1

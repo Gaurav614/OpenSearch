@@ -9,8 +9,9 @@
 package org.opensearch.index.store.remote.filecache;
 
 import org.apache.lucene.store.IndexInput;
-import org.opensearch.common.breaker.CircuitBreaker;
-import org.opensearch.common.breaker.CircuitBreakingException;
+import org.opensearch.common.settings.Setting;
+import org.opensearch.core.common.breaker.CircuitBreaker;
+import org.opensearch.core.common.breaker.CircuitBreakingException;
 import org.opensearch.index.store.remote.utils.cache.CacheUsage;
 import org.opensearch.index.store.remote.utils.cache.RefCountedCache;
 import org.opensearch.index.store.remote.utils.cache.SegmentedCache;
@@ -22,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 import static org.opensearch.index.store.remote.directory.RemoteSnapshotDirectoryFactory.LOCAL_STORE_LOCATION;
 
@@ -47,6 +49,21 @@ public class FileCache implements RefCountedCache<Path, CachedIndexInput> {
     private final SegmentedCache<Path, CachedIndexInput> theCache;
 
     private final CircuitBreaker circuitBreaker;
+
+    /**
+     * Defines a limit of how much total remote data can be referenced as a ratio of the size of the disk reserved for
+     * the file cache. For example, if 100GB disk space is configured for use as a file cache and the
+     * remote_data_ratio of 5 is defined, then a total of 500GB of remote data can be loaded as searchable snapshots.
+     * This is designed to be a safeguard to prevent oversubscribing a cluster.
+     * Specify a value of zero for no limit, which is the default for compatibility reasons.
+     */
+    public static final Setting<Double> DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING = Setting.doubleSetting(
+        "cluster.filecache.remote_data_ratio",
+        0.0,
+        0.0,
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
 
     public FileCache(SegmentedCache<Path, CachedIndexInput> cache, CircuitBreaker circuitBreaker) {
         this.theCache = cache;
@@ -119,6 +136,11 @@ public class FileCache implements RefCountedCache<Path, CachedIndexInput> {
     @Override
     public long prune() {
         return theCache.prune();
+    }
+
+    @Override
+    public long prune(Predicate<Path> keyPredicate) {
+        return theCache.prune(keyPredicate);
     }
 
     @Override

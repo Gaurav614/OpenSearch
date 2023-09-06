@@ -35,16 +35,17 @@ package org.opensearch.search;
 import org.apache.lucene.search.BooleanQuery;
 import org.opensearch.common.NamedRegistry;
 import org.opensearch.common.Nullable;
-import org.opensearch.core.ParseField;
 import org.opensearch.common.geo.GeoShapeType;
 import org.opensearch.common.geo.ShapesAvailability;
-import org.opensearch.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.common.io.stream.NamedWriteableRegistry.Entry;
-import org.opensearch.common.io.stream.Writeable;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.common.xcontent.ParseFieldRegistry;
+import org.opensearch.core.ParseField;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry.Entry;
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.BoostingQueryBuilder;
@@ -171,6 +172,7 @@ import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
 import org.opensearch.search.aggregations.bucket.terms.UnmappedRareTerms;
 import org.opensearch.search.aggregations.bucket.terms.UnmappedSignificantTerms;
 import org.opensearch.search.aggregations.bucket.terms.UnmappedTerms;
+import org.opensearch.search.aggregations.bucket.terms.UnsignedLongTerms;
 import org.opensearch.search.aggregations.bucket.terms.heuristic.ChiSquare;
 import org.opensearch.search.aggregations.bucket.terms.heuristic.GND;
 import org.opensearch.search.aggregations.bucket.terms.heuristic.JLHScore;
@@ -257,6 +259,7 @@ import org.opensearch.search.fetch.subphase.highlight.PlainHighlighter;
 import org.opensearch.search.fetch.subphase.highlight.UnifiedHighlighter;
 import org.opensearch.search.query.QueryPhase;
 import org.opensearch.search.query.QueryPhaseSearcher;
+import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.search.rescore.RescorerBuilder;
 import org.opensearch.search.sort.FieldSortBuilder;
@@ -292,6 +295,7 @@ import static java.util.Collections.unmodifiableList;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Objects.requireNonNull;
 import static org.opensearch.index.query.CommonTermsQueryBuilder.COMMON_TERMS_QUERY_DEPRECATION_MSG;
+import static org.opensearch.threadpool.ThreadPool.Names.INDEX_SEARCHER;
 
 /**
  * Sets up things that can be done at search time like queries, aggregations, and suggesters.
@@ -520,6 +524,7 @@ public class SearchModule {
                 .addResultReader(UnmappedTerms.NAME, UnmappedTerms::new)
                 .addResultReader(LongTerms.NAME, LongTerms::new)
                 .addResultReader(DoubleTerms.NAME, DoubleTerms::new)
+                .addResultReader(UnsignedLongTerms.NAME, UnsignedLongTerms::new)
                 .setAggregatorRegistrar(TermsAggregationBuilder::registerAggregators),
             builder
         );
@@ -991,6 +996,7 @@ public class SearchModule {
         registerValueFormat(DocValueFormat.RAW.getWriteableName(), in -> DocValueFormat.RAW);
         registerValueFormat(DocValueFormat.BINARY.getWriteableName(), in -> DocValueFormat.BINARY);
         registerValueFormat(DocValueFormat.UNSIGNED_LONG_SHIFTED.getWriteableName(), in -> DocValueFormat.UNSIGNED_LONG_SHIFTED);
+        registerValueFormat(DocValueFormat.UNSIGNED_LONG.getWriteableName(), in -> DocValueFormat.UNSIGNED_LONG);
     }
 
     /**
@@ -1252,6 +1258,9 @@ public class SearchModule {
             }
         }
 
+        if (searcher == null) {
+            searcher = new QueryPhaseSearcherWrapper();
+        }
         return searcher;
     }
 
@@ -1270,6 +1279,9 @@ public class SearchModule {
             }
         }
 
+        if (provider == null && FeatureFlags.isEnabled(FeatureFlags.CONCURRENT_SEGMENT_SEARCH)) {
+            provider = (ThreadPool threadPool) -> threadPool.executor(INDEX_SEARCHER);
+        }
         return provider;
     }
 
@@ -1278,10 +1290,10 @@ public class SearchModule {
     }
 
     public QueryPhase getQueryPhase() {
-        return (queryPhaseSearcher == null) ? new QueryPhase() : new QueryPhase(queryPhaseSearcher);
+        return new QueryPhase(queryPhaseSearcher);
     }
 
     public @Nullable ExecutorService getIndexSearcherExecutor(ThreadPool pool) {
-        return (indexSearcherExecutorProvider == null) ? null : indexSearcherExecutorProvider.getExecutor(pool);
+        return (indexSearcherExecutorProvider != null) ? indexSearcherExecutorProvider.getExecutor(pool) : null;
     }
 }

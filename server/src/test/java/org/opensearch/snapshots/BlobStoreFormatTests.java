@@ -39,10 +39,12 @@ import org.opensearch.common.blobstore.BlobMetadata;
 import org.opensearch.common.blobstore.BlobPath;
 import org.opensearch.common.blobstore.BlobStore;
 import org.opensearch.common.blobstore.fs.FsBlobStore;
-import org.opensearch.common.bytes.BytesArray;
+import org.opensearch.common.compress.DeflateCompressor;
 import org.opensearch.common.io.Streams;
 import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.io.stream.StreamInput;
+import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.compress.CompressorRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -55,6 +57,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
+
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThan;
 
@@ -117,8 +120,13 @@ public class BlobStoreFormatTests extends OpenSearchTestCase {
         ChecksumBlobStoreFormat<BlobObj> checksumSMILE = new ChecksumBlobStoreFormat<>(BLOB_CODEC, "%s", BlobObj::fromXContent);
 
         // Write blobs in different formats
-        checksumSMILE.write(new BlobObj("checksum smile"), blobContainer, "check-smile", false);
-        checksumSMILE.write(new BlobObj("checksum smile compressed"), blobContainer, "check-smile-comp", true);
+        checksumSMILE.write(new BlobObj("checksum smile"), blobContainer, "check-smile", CompressorRegistry.none());
+        checksumSMILE.write(
+            new BlobObj("checksum smile compressed"),
+            blobContainer,
+            "check-smile-comp",
+            CompressorRegistry.getCompressor(DeflateCompressor.NAME)
+        );
 
         // Assert that all checksum blobs can be read
         assertEquals(checksumSMILE.read(blobContainer, "check-smile", xContentRegistry()).getText(), "checksum smile");
@@ -134,8 +142,8 @@ public class BlobStoreFormatTests extends OpenSearchTestCase {
         }
         ChecksumBlobStoreFormat<BlobObj> checksumFormat = new ChecksumBlobStoreFormat<>(BLOB_CODEC, "%s", BlobObj::fromXContent);
         BlobObj blobObj = new BlobObj(veryRedundantText.toString());
-        checksumFormat.write(blobObj, blobContainer, "blob-comp", true);
-        checksumFormat.write(blobObj, blobContainer, "blob-not-comp", false);
+        checksumFormat.write(blobObj, blobContainer, "blob-comp", CompressorRegistry.getCompressor(DeflateCompressor.NAME));
+        checksumFormat.write(blobObj, blobContainer, "blob-not-comp", CompressorRegistry.none());
         Map<String, BlobMetadata> blobs = blobContainer.listBlobsByPrefix("blob-");
         assertEquals(blobs.size(), 2);
         assertThat(blobs.get("blob-not-comp").length(), greaterThan(blobs.get("blob-comp").length()));
@@ -147,7 +155,7 @@ public class BlobStoreFormatTests extends OpenSearchTestCase {
         String testString = randomAlphaOfLength(randomInt(10000));
         BlobObj blobObj = new BlobObj(testString);
         ChecksumBlobStoreFormat<BlobObj> checksumFormat = new ChecksumBlobStoreFormat<>(BLOB_CODEC, "%s", BlobObj::fromXContent);
-        checksumFormat.write(blobObj, blobContainer, "test-path", randomBoolean());
+        checksumFormat.write(blobObj, blobContainer, "test-path", randomFrom(CompressorRegistry.registeredCompressors().values()));
         assertEquals(checksumFormat.read(blobContainer, "test-path", xContentRegistry()).getText(), testString);
         randomCorruption(blobContainer, "test-path");
         try {

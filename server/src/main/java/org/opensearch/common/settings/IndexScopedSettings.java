@@ -76,6 +76,8 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
 
     public static final Predicate<String> INDEX_SETTINGS_KEY_PREDICATE = (s) -> s.startsWith(IndexMetadata.INDEX_SETTING_PREFIX);
 
+    public static final Predicate<String> ARCHIVED_SETTINGS_KEY_PREDICATE = (s) -> s.startsWith(ARCHIVED_SETTINGS_PREFIX);
+
     public static final Set<Setting<?>> BUILT_IN_INDEX_SETTINGS = Collections.unmodifiableSet(
         new HashSet<>(
             Arrays.asList(
@@ -169,6 +171,7 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
                 IndexSettings.INDEX_TRANSLOG_RETENTION_SIZE_SETTING,
                 IndexSettings.INDEX_SEARCH_IDLE_AFTER,
                 IndexSettings.INDEX_SEARCH_THROTTLED,
+                IndexSettings.INDEX_UNREFERENCED_FILE_CLEANUP,
                 IndexFieldDataService.INDEX_FIELDDATA_CACHE_KEY,
                 FieldMapper.IGNORE_MALFORMED_SETTING,
                 FieldMapper.COERCE_SETTING,
@@ -183,11 +186,13 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
                 IndexModule.INDEX_STORE_TYPE_SETTING,
                 IndexModule.INDEX_STORE_PRE_LOAD_SETTING,
                 IndexModule.INDEX_STORE_HYBRID_MMAP_EXTENSIONS,
+                IndexModule.INDEX_STORE_HYBRID_NIO_EXTENSIONS,
                 IndexModule.INDEX_RECOVERY_TYPE_SETTING,
                 IndexModule.INDEX_QUERY_CACHE_ENABLED_SETTING,
                 FsDirectoryFactory.INDEX_LOCK_FACTOR_SETTING,
                 Store.FORCE_RAM_TERM_DICT,
                 EngineConfig.INDEX_CODEC_SETTING,
+                EngineConfig.INDEX_CODEC_COMPRESSION_LEVEL_SETTING,
                 EngineConfig.INDEX_OPTIMIZE_AUTO_GENERATED_IDS,
                 IndexMetadata.SETTING_WAIT_FOR_ACTIVE_SHARDS,
                 IndexSettings.DEFAULT_PIPELINE,
@@ -197,12 +202,16 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
                 IndexSettings.INDEX_MERGE_ON_FLUSH_ENABLED,
                 IndexSettings.INDEX_MERGE_ON_FLUSH_MAX_FULL_FLUSH_MERGE_WAIT_TIME,
                 IndexSettings.INDEX_MERGE_ON_FLUSH_POLICY,
+                IndexSettings.DEFAULT_SEARCH_PIPELINE,
 
                 // Settings for Searchable Snapshots
                 IndexSettings.SEARCHABLE_SNAPSHOT_REPOSITORY,
                 IndexSettings.SEARCHABLE_SNAPSHOT_INDEX_ID,
                 IndexSettings.SEARCHABLE_SNAPSHOT_ID_NAME,
                 IndexSettings.SEARCHABLE_SNAPSHOT_ID_UUID,
+
+                // Settings for remote translog
+                IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING,
 
                 // validate that built-in similarities don't get redefined
                 Setting.groupSetting("index.similarity.", (s) -> {
@@ -230,11 +239,11 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         FeatureFlags.REMOTE_STORE,
         List.of(
             IndexMetadata.INDEX_REMOTE_STORE_ENABLED_SETTING,
-            IndexMetadata.INDEX_REMOTE_STORE_REPOSITORY_SETTING,
-            IndexMetadata.INDEX_REMOTE_TRANSLOG_STORE_ENABLED_SETTING,
-            IndexMetadata.INDEX_REMOTE_TRANSLOG_REPOSITORY_SETTING,
-            IndexMetadata.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING
-        )
+            IndexMetadata.INDEX_REMOTE_SEGMENT_STORE_REPOSITORY_SETTING,
+            IndexMetadata.INDEX_REMOTE_TRANSLOG_REPOSITORY_SETTING
+        ),
+        FeatureFlags.CONCURRENT_SEGMENT_SEARCH,
+        List.of(IndexSettings.INDEX_CONCURRENT_SEGMENT_SEARCH_SETTING)
     );
 
     public static final IndexScopedSettings DEFAULT_SCOPED_SETTINGS = new IndexScopedSettings(Settings.EMPTY, BUILT_IN_INDEX_SETTINGS);
