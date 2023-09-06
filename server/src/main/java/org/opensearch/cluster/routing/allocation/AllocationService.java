@@ -568,7 +568,7 @@ public class AllocationService {
             }
         }
     }
-    
+
     private void disassociateDeadNodes(RoutingAllocation allocation) {
         for (Iterator<RoutingNode> it = allocation.routingNodes().mutableIterator(); it.hasNext();) {
             RoutingNode node = it.next();
