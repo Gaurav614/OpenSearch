@@ -162,12 +162,8 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
     }
 
     private static NodeShardStates getNodeShardStates(ShardRouting unassignedShard, FetchResult<NodeGatewayStartedShardsBatch> shardsState) {
-        NodeShardStates nodeShardStates = new NodeShardStates(new Comparator<NodeShardState>() {
-            @Override
-            public int compare(NodeShardState o1, NodeShardState o2) {
-                return 1;
-            }
-        });
+        // using dummy comparator here, actual sorting will be done in PrimaryShardAllocator using inSyncAllocationIds
+        NodeShardStates nodeShardStates = new NodeShardStates((o1, o2) -> 1);
         Map<DiscoveryNode, NodeGatewayStartedShardsBatch> nodeResponses = shardsState.getData();
 
         // build data for a shard from all the nodes
