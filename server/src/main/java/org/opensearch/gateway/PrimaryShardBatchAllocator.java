@@ -162,18 +162,13 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
     }
 
     private static NodeShardStates getNodeShardStates(ShardRouting unassignedShard, FetchResult<NodeGatewayStartedShardsBatch> shardsState) {
-        NodeShardStates nodeShardStates = new NodeShardStates(new Comparator<NodeShardState>() {
-            @Override
-            public int compare(NodeShardState o1, NodeShardState o2) {
-                return 1;
-            }
-        });
+        NodeShardStates nodeShardStates = new NodeShardStates();
         Map<DiscoveryNode, NodeGatewayStartedShardsBatch> nodeResponses = shardsState.getData();
 
         // build data for a shard from all the nodes
         nodeResponses.forEach((node, nodeGatewayStartedShardsBatch) -> {
             NodeGatewayStartedShards shardData = nodeGatewayStartedShardsBatch.getNodeGatewayStartedShardsBatch().get(unassignedShard.shardId());
-            nodeShardStates.add(new NodeShardState(node, shardData.allocationId(), shardData.primary(), shardData.replicationCheckpoint(), shardData.storeException()), node);
+            nodeShardStates.add(new NodeShardState(node, shardData.allocationId(), shardData.primary(), shardData.replicationCheckpoint(), shardData.storeException()));
         });
         return nodeShardStates;
     }
