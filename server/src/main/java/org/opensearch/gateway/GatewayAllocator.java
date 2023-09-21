@@ -293,11 +293,11 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         assert maxBatchSize > 0 : "Shards batch size must be greater than 0";
 
         long batchSize = maxBatchSize;
-        Map<ShardId, SharEntry> addToCurrentBatch = new HashMap<>();
+        Map<ShardId, ShardEntry> addToCurrentBatch = new HashMap<>();
         while (iterator.hasNext()) {
             ShardRouting currentShard = iterator.next();
             if (batchSize > 0) {
-                SharEntry sharEntry = new SharEntry(IndexMetadata.INDEX_DATA_PATH_SETTING.get(allocation.metadata().index(currentShard.index()).getSettings())
+                ShardEntry sharEntry = new ShardEntry(IndexMetadata.INDEX_DATA_PATH_SETTING.get(allocation.metadata().index(currentShard.index()).getSettings())
                     , currentShard);
                 addToCurrentBatch.put(currentShard.shardId(), sharEntry);
                 batchSize--;
@@ -748,9 +748,9 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
         private final AsyncShardFetch<? extends BaseNodeResponse> asyncBatch;
 
-        private final Map<ShardId, SharEntry> batchInfo;
+        private final Map<ShardId, ShardEntry> batchInfo;
 
-        public ShardsBatch(String batchId, Map<ShardId, SharEntry> shardsWithInfo, boolean primary) {
+        public ShardsBatch(String batchId, Map<ShardId, ShardEntry> shardsWithInfo, boolean primary) {
             this.batchId = batchId;
             this.batchInfo = new HashMap<>(shardsWithInfo);
             // create a ShardId -> customDataPath map for async fetch
@@ -785,7 +785,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         }
 
        public Set<ShardRouting> getBatchedShardRoutings() {
-            return batchInfo.values().stream().map(SharEntry::getShardRouting).collect(Collectors.toSet());
+            return batchInfo.values().stream().map(ShardEntry::getShardRouting).collect(Collectors.toSet());
         }
 
       public Set<ShardId> getBatchedShards() {
@@ -831,18 +831,18 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     /**
      * Holds information about a shard to be allocated in a batch.
      */
-        private class SharEntry {
+        private class ShardEntry {
 
         private final String customDataPath;
 
-        public SharEntry setShardRouting(ShardRouting shardRouting) {
+        public ShardEntry setShardRouting(ShardRouting shardRouting) {
             this.shardRouting = shardRouting;
             return this;
         }
 
         private ShardRouting shardRouting;
 
-        public SharEntry(String customDataPath, ShardRouting shardRouting) {
+        public ShardEntry(String customDataPath, ShardRouting shardRouting) {
             this.customDataPath = customDataPath;
             this.shardRouting = shardRouting;
         }
