@@ -234,9 +234,24 @@ public class TestGatewayAllocator extends GatewayAllocator {
         shardIdNodeToReplicationCheckPointMap.putIfAbsent(getReplicationCheckPointKey(shardId, nodeName), replicationCheckpoint);
     }
 
-     Set<String> callCreateAndUpdateBatches(RoutingAllocation allocation, boolean primary){
+    @Override
+    protected Set<String> createAndUpdateBatches(RoutingAllocation allocation, boolean primary) {
+        return super.createAndUpdateBatches(allocation, primary);
+    }
 
-        return createAndUpdateBatches(allocation, primary);
+    @Override
+    protected void safelyRemoveShardFromBatch(ShardRouting shard){
+        super.safelyRemoveShardFromBatch(shard);
+    }
+
+    @Override
+    protected void safelyRemoveShardFromBothBatch(ShardRouting shardRouting) {
+        super.safelyRemoveShardFromBothBatch(shardRouting);
+    }
+
+    @Override
+    protected String getBatchId(ShardRouting shard, boolean primary) {
+        return super.getBatchId(shard, primary);
     }
 
     Map<String, GatewayAllocator.ShardsBatch> getBatchIdToStartedShardBatch(){
