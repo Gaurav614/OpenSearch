@@ -548,12 +548,12 @@ public class AllocationService {
         for (final ExistingShardsAllocator existingShardsAllocator : existingShardsAllocators.values()) {
             existingShardsAllocator.beforeAllocation(allocation);
         }
-        // batch Mode enabled setting to be added
+
         boolean batchModeEnabled = allocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT);
         if (batchModeEnabled) {
             // since allocators is per index setting, to have batch assignment verify allocators same for all shards
             // if not fallback to single assignment
-            ExistingShardsAllocator allocator = verifySameAllocatorForAllShards(allocation);
+            ExistingShardsAllocator allocator = verifySameAllocatorForAllUnassignedShards(allocation);
             if (allocator != null) {
                 allocator.allocateUnassignedBatch(allocation, true);
                 for (final ExistingShardsAllocator existingShardsAllocator : existingShardsAllocators.values()) {
@@ -563,7 +563,6 @@ public class AllocationService {
                 return;
             }
         }
-
 
         final RoutingNodes.UnassignedShards.UnassignedIterator primaryIterator = allocation.routingNodes().unassigned().iterator();
         while (primaryIterator.hasNext()) {
@@ -586,7 +585,13 @@ public class AllocationService {
         }
     }
 
-    private ExistingShardsAllocator verifySameAllocatorForAllShards(RoutingAllocation allocation) {
+    /**
+     * Verify if all unassigned shards are allocated by the same allocator, if yes then return the allocator, else
+     * return null
+     * @param allocation {@link RoutingAllocation}
+     * @return {@link ExistingShardsAllocator} or null
+     */
+    private ExistingShardsAllocator verifySameAllocatorForAllUnassignedShards(RoutingAllocation allocation) {
         // if there is a single Allocator set in Allocation Service then use it for all shards
         if (existingShardsAllocators.size() == 1) {
             return existingShardsAllocators.values().iterator().next();

@@ -234,31 +234,29 @@ public class TestGatewayAllocator extends GatewayAllocator {
         shardIdNodeToReplicationCheckPointMap.putIfAbsent(getReplicationCheckPointKey(shardId, nodeName), replicationCheckpoint);
     }
 
-    @Override
-    protected Set<String> createAndUpdateBatches(RoutingAllocation allocation, boolean primary) {
+
+    public Set<String> createAndUpdateBatches(RoutingAllocation allocation, boolean primary) {
         return super.createAndUpdateBatches(allocation, primary);
     }
 
-    @Override
-    protected void safelyRemoveShardFromBatch(ShardRouting shard){
+    public void safelyRemoveShardFromBatch(ShardRouting shard){
         super.safelyRemoveShardFromBatch(shard);
     }
 
-    @Override
-    protected void safelyRemoveShardFromBothBatch(ShardRouting shardRouting) {
+
+    public void safelyRemoveShardFromBothBatch(ShardRouting shardRouting) {
         super.safelyRemoveShardFromBothBatch(shardRouting);
     }
 
-    @Override
-    protected String getBatchId(ShardRouting shard, boolean primary) {
+    public String getBatchId(ShardRouting shard, boolean primary) {
         return super.getBatchId(shard, primary);
     }
 
-    Map<String, GatewayAllocator.ShardsBatch> getBatchIdToStartedShardBatch(){
+    public Map<String, GatewayAllocator.ShardsBatch> getBatchIdToStartedShardBatch(){
         return batchIdToStartedShardBatch;
     }
 
-    Map<String, GatewayAllocator.ShardsBatch> getBatchIdToStoreShardBatch(){
+    public Map<String, GatewayAllocator.ShardsBatch> getBatchIdToStoreShardBatch(){
         return batchIdToStoreShardBatch;
     }
 }

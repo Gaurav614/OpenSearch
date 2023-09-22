@@ -6,7 +6,7 @@
  * compatible open source license.
  */
 
-package org.opensearch.test.gateway;
+package org.opensearch.gateway;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,9 +28,8 @@ import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.gateway.AsyncShardFetch;
-import org.opensearch.gateway.GatewayAllocator;
 import org.opensearch.snapshots.SnapshotShardSizeInfo;
+import org.opensearch.test.gateway.TestGatewayAllocator;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -107,7 +106,7 @@ public class GatewayAllocatorTests extends OpenSearchAllocationTestCase {
 
     public void testAsyncFetcherCreationInBatch(){
         createIndexAndUpdateClusterState(1, 3, 1);
-        Tuple<Set<String>, Set<String>> batchesTuple = createBatchesAndAssert(2);
+        Tuple<Set<String>, Set<String>> batchesTuple = createBatchesAndAssert(1);
         Set<String> primaryBatches = batchesTuple.v1();
         Set<String> replicaBatches = batchesTuple.v2();
 
