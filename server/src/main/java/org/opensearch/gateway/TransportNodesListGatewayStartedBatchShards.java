@@ -56,15 +56,15 @@ import java.util.stream.Collectors;
  *
  * @opensearch.internal
  */
-public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesAction<
-    TransportNodesListGatewayStartedShardsBatch.Request,
-    TransportNodesListGatewayStartedShardsBatch.NodesGatewayStartedShardsBatch,
-    TransportNodesListGatewayStartedShardsBatch.NodeRequest,
-    TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch>
+public class TransportNodesListGatewayStartedBatchShards extends TransportNodesAction<
+    TransportNodesListGatewayStartedBatchShards.Request,
+    TransportNodesListGatewayStartedBatchShards.NodesGatewayStartedShardsBatch,
+    TransportNodesListGatewayStartedBatchShards.NodeRequest,
+    TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch>
     implements
         AsyncShardFetch.Lister<
-            TransportNodesListGatewayStartedShardsBatch.NodesGatewayStartedShardsBatch,
-            TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> {
+            TransportNodesListGatewayStartedBatchShards.NodesGatewayStartedShardsBatch,
+            TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch> {
 
     public static final String ACTION_NAME = "internal:gateway/local/started_shards_batch";
     public static final ActionType<NodesGatewayStartedShardsBatch> TYPE = new ActionType<>(
@@ -78,7 +78,7 @@ public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesA
     private final NamedXContentRegistry namedXContentRegistry;
 
     @Inject
-    public TransportNodesListGatewayStartedShardsBatch(
+    public TransportNodesListGatewayStartedBatchShards(
         Settings settings,
         ThreadPool threadPool,
         ClusterService clusterService,
