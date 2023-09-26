@@ -159,6 +159,7 @@ public class DecisionsImpactOnClusterHealthTests extends OpenSearchAllocationTes
     private static AllocationService newAllocationService(Settings settings, Set<AllocationDecider> deciders) {
         return new AllocationService(
             new AllocationDeciders(deciders),
+
             new TestGatewayAllocator(),
             new BalancedShardsAllocator(settings),
             EmptyClusterInfoService.INSTANCE,

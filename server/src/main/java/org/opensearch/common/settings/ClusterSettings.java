@@ -62,6 +62,7 @@ import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.routing.OperationRouting;
 import org.opensearch.cluster.routing.allocation.AwarenessReplicaBalance;
 import org.opensearch.cluster.routing.allocation.DiskThresholdSettings;
+import org.opensearch.cluster.routing.allocation.ExistingShardsAllocator;
 import org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
 import org.opensearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;
 import org.opensearch.cluster.routing.allocation.decider.ClusterRebalanceAllocationDecider;
@@ -251,6 +252,7 @@ public final class ClusterSettings extends AbstractScopedSettings {
                 DanglingIndicesState.AUTO_IMPORT_DANGLING_INDICES_SETTING,
                 EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING,
                 EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING,
+                ExistingShardsAllocator.EXISTING_SHARDS_ALLOCATOR_BATCH_MODE_ENABLED,
                 FilterAllocationDecider.CLUSTER_ROUTING_INCLUDE_GROUP_SETTING,
                 FilterAllocationDecider.CLUSTER_ROUTING_EXCLUDE_GROUP_SETTING,
                 FilterAllocationDecider.CLUSTER_ROUTING_REQUIRE_GROUP_SETTING,

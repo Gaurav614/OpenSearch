@@ -55,6 +55,7 @@ import org.opensearch.cluster.routing.allocation.allocator.ShardsAllocator;
 import org.opensearch.cluster.routing.allocation.command.AllocationCommands;
 import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;
 import org.opensearch.cluster.routing.allocation.decider.Decision;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.gateway.GatewayAllocator;
 import org.opensearch.gateway.PriorityComparator;
 import org.opensearch.snapshots.SnapshotsInfoService;
@@ -74,6 +75,7 @@ import java.util.stream.Collectors;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 import static org.opensearch.cluster.routing.UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING;
+import static org.opensearch.cluster.routing.allocation.ExistingShardsAllocator.EXISTING_SHARDS_ALLOCATOR_BATCH_MODE_ENABLED;
 
 /**
  * This service manages the node allocation of a cluster. For this reason the
@@ -88,6 +90,7 @@ public class AllocationService {
     private static final Logger logger = LogManager.getLogger(AllocationService.class);
 
     private final AllocationDeciders allocationDeciders;
+    private  Settings settings;
     private Map<String, ExistingShardsAllocator> existingShardsAllocators;
     private final ShardsAllocator shardsAllocator;
     private final ClusterInfoService clusterInfoService;
@@ -115,8 +118,23 @@ public class AllocationService {
         this.shardsAllocator = shardsAllocator;
         this.clusterInfoService = clusterInfoService;
         this.snapshotsInfoService = snapshotsInfoService;
+        this.settings = Settings.EMPTY;
     }
 
+    public AllocationService(
+        AllocationDeciders allocationDeciders,
+        ShardsAllocator shardsAllocator,
+        ClusterInfoService clusterInfoService,
+        SnapshotsInfoService snapshotsInfoService,
+        Settings settings
+
+    ) {
+        this.allocationDeciders = allocationDeciders;
+        this.shardsAllocator = shardsAllocator;
+        this.clusterInfoService = clusterInfoService;
+        this.snapshotsInfoService = snapshotsInfoService;
+        this.settings = settings;
+    }
     /**
      * Inject the {@link ExistingShardsAllocator}s to use. May only be called once.
      */
@@ -549,8 +567,9 @@ public class AllocationService {
             existingShardsAllocator.beforeAllocation(allocation);
         }
 
-        boolean batchModeEnabled = allocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT);
-        if (batchModeEnabled) {
+        Boolean batchModeEnabled = EXISTING_SHARDS_ALLOCATOR_BATCH_MODE_ENABLED.get(settings);
+
+        if (batchModeEnabled && allocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT)) {
             // since allocators is per index setting, to have batch assignment verify allocators same for all shards
             // if not fallback to single assignment
             ExistingShardsAllocator allocator = verifySameAllocatorForAllUnassignedShards(allocation);

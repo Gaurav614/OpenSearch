@@ -853,4 +853,11 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         }
     }
 
+    public int getNumberOfStartedShardBatches() {
+            return batchIdToStoreShardBatch.size();
+    }
+
+    public int getNumberOfStoreShardBatches(){
+            return batchIdToStoreShardBatch.size();
+    }
 }
