@@ -45,7 +45,7 @@ import org.opensearch.gateway.PrimaryShardBatchAllocator;
 import org.opensearch.gateway.ReplicaShardAllocator;
 import org.opensearch.gateway.ReplicaShardBatchAllocator;
 import org.opensearch.gateway.TransportNodesListGatewayStartedShards.NodeGatewayStartedShards;
-import org.opensearch.gateway.TransportNodesListGatewayStartedShardsBatch;
+import org.opensearch.gateway.TransportNodesListGatewayStartedBatchShards;
 import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
@@ -111,22 +111,22 @@ public class TestGatewayAllocator extends GatewayAllocator {
 
     PrimaryShardBatchAllocator primaryShardBatchAllocator = new PrimaryShardBatchAllocator() {
         @Override
-        protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> fetchData(Set<ShardRouting> shardsEligibleForFetch,
+        protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch> fetchData(Set<ShardRouting> shardsEligibleForFetch,
                                                                                                                                    Set<ShardRouting> inEligibleShards,
                                                                                                                                    RoutingAllocation allocation) {
-            Map<DiscoveryNode, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> foundShards = new HashMap<>();
+            Map<DiscoveryNode, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch> foundShards = new HashMap<>();
             HashMap<ShardId, Set<String>> shardsToIgnoreNodes = new HashMap<>();
             for (Map.Entry<String, Map<ShardId, ShardRouting>> entry : knownAllocations.entrySet()) {
                 String nodeId = entry.getKey();
                 Map<ShardId, ShardRouting> shardsOnNode = entry.getValue();
-                HashMap<ShardId, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShards> adaptedResponse = new HashMap<>();
+                HashMap<ShardId, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards> adaptedResponse = new HashMap<>();
 
                 for (ShardRouting shardRouting : shardsEligibleForFetch) {
                     ShardId shardId = shardRouting.shardId();
                     Set<String> ignoreNodes = allocation.getIgnoreNodes(shardId);
 
                     if (shardsOnNode.containsKey(shardId) && ignoreNodes.contains(nodeId) == false && currentNodes.nodeExists(nodeId)) {
-                        TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShards nodeShard = new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShards(
+                        TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards nodeShard = new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards(
                             shardRouting.allocationId().getId(),
                             shardRouting.primary(),
                             getReplicationCheckpoint(shardId, nodeId)
@@ -135,7 +135,7 @@ public class TestGatewayAllocator extends GatewayAllocator {
                         shardsToIgnoreNodes.put(shardId, ignoreNodes);
                     }
                     foundShards.put(currentNodes.get(nodeId),
-                        new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch(currentNodes.get(nodeId), adaptedResponse));
+                        new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch(currentNodes.get(nodeId), adaptedResponse));
                 }
             }
             return new AsyncShardFetch.FetchResult<>(foundShards, shardsToIgnoreNodes);

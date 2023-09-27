@@ -96,7 +96,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
     private final PrimaryShardBatchAllocator primaryBatchShardAllocator;
     private final ReplicaShardBatchAllocator replicaBatchShardAllocator;
-    private final TransportNodesListGatewayStartedShardsBatch batchStartedAction;
+    private final TransportNodesListGatewayStartedBatchShards batchStartedAction;
     private final TransportNodesListShardStoreMetadataBatch batchStoreAction;
 
     private final ConcurrentMap<
@@ -127,7 +127,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         RerouteService rerouteService,
         TransportNodesListGatewayStartedShards startedAction,
         TransportNodesListShardStoreMetadata storeAction,
-        TransportNodesListGatewayStartedShardsBatch batchStartedAction,
+        TransportNodesListGatewayStartedBatchShards batchStartedAction,
         TransportNodesListShardStoreMetadataBatch batchStoreAction,
         Settings settings
     ) {
@@ -595,7 +595,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
         @Override
         @SuppressWarnings("unchecked")
-        protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> fetchData(Set<ShardRouting> shardsEligibleForFetch,
+        protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch> fetchData(Set<ShardRouting> shardsEligibleForFetch,
                                                                                                                                    Set<ShardRouting> inEligibleShards,
                                                                                                                                    RoutingAllocation allocation) {
             ShardRouting shardRouting = shardsEligibleForFetch.iterator().hasNext() ? shardsEligibleForFetch.iterator().next() : null;
@@ -638,7 +638,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             if (shardBatchState.hasData()) {
                 shardBatchState.processAllocation(allocation);
             }
-            return (AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch>) shardBatchState;
+            return (AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch>) shardBatchState;
         }
 
     }
