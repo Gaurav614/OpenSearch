@@ -73,6 +73,7 @@ import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
 import org.opensearch.test.OpenSearchIntegTestCase.Scope;
 import org.opensearch.test.store.MockFSIndexStore;
 
+import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -897,6 +898,67 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         assertEquals(2, health.getNumberOfDataNodes());
         assertEquals(0, gatewayAllocator.getNumberOfStartedShardBatches());
         assertEquals(0, gatewayAllocator.getNumberOfStoreShardBatches());
+    }
+
+    public void testCulpritShardInBatch() throws Exception {
+        internalCluster().startClusterManagerOnlyNodes(1);
+        List<String> dataOnlyNodes = internalCluster().startDataOnlyNodes(3);
+        createNIndices(4, "test");
+        ensureStableCluster(4);
+        ClusterHealthResponse health = client().admin()
+            .cluster()
+            .health(
+                Requests.clusterHealthRequest()
+                    .waitForGreenStatus()
+                    .timeout("1m"))
+            .actionGet();
+        assertFalse(health.isTimedOut());
+        assertEquals(GREEN, health.getStatus());
+        assertEquals(8, health.getActiveShards());
+
+        String culpritShardIndexName = "test0";
+        final String customDataPath = IndexMetadata.INDEX_DATA_PATH_SETTING.get(
+            client().admin().indices().prepareGetSettings(culpritShardIndexName).get().getIndexToSettings().get(culpritShardIndexName)
+        );
+        final Index index = resolveIndex(culpritShardIndexName);
+        final ShardId shardId = new ShardId(index, 0);
+
+        for (String dataNode : dataOnlyNodes) {
+            for (Path path : internalCluster().getInstance(NodeEnvironment.class, dataNode).availableShardPaths(shardId)) {
+                final Path indexPath = path.resolve(ShardPath.INDEX_FOLDER_NAME);
+                if (Files.exists(indexPath)) { // multi data path might only have one path in use
+                    try (DirectoryStream<Path> stream = Files.newDirectoryStream(indexPath)) {
+                        for (Path item : stream) {
+                            if (item.getFileName().toString().startsWith("segments_")) {
+                                logger.debug("--> deleting [{}]", item);
+                                Files.delete(item);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        internalCluster().fullRestart();
+        // do reroute
+        logger.info("--> Now do a protective reroute"); // to avoid any race condition in test
+        ClusterRerouteResponse clusterRerouteResponse = client().admin().cluster().prepareReroute().setRetryFailed(true).get();
+        assertTrue(clusterRerouteResponse.isAcknowledged());
+
+        health = client().admin()
+            .cluster()
+            .health(
+                Requests.clusterHealthRequest())
+            .actionGet();
+        GatewayAllocator gatewayAllocator = internalCluster().getInstance(GatewayAllocator.class, internalCluster().getClusterManagerName());
+        assertFalse(health.isTimedOut());
+        assertEquals(RED, health.getStatus());
+        assertEquals(6, health.getActiveShards());
+        assertEquals(2, health.getUnassignedShards());
+        assertEquals(0, health.getInitializingShards());
+        assertEquals(0, health.getRelocatingShards());
+        assertEquals(3, health.getNumberOfDataNodes());
+        assertEquals(1, gatewayAllocator.getNumberOfStartedShardBatches());
+        assertEquals(1, gatewayAllocator.getNumberOfStoreShardBatches());
     }
 
     private void createNIndices(int n, String prefix) {
