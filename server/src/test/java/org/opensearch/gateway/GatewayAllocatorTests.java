@@ -19,10 +19,14 @@ import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.OpenSearchAllocationTestCase;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.routing.AllocationId;
 import org.opensearch.cluster.routing.IndexShardRoutingTable;
+import org.opensearch.cluster.routing.RecoverySource;
 import org.opensearch.cluster.routing.RoutingNodes;
 import org.opensearch.cluster.routing.RoutingTable;
 import org.opensearch.cluster.routing.ShardRouting;
+import org.opensearch.cluster.routing.ShardRoutingState;
+import org.opensearch.cluster.routing.UnassignedInfo;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;
 import org.opensearch.common.collect.Tuple;
@@ -182,7 +186,7 @@ public class GatewayAllocatorTests extends OpenSearchAllocationTestCase {
         assertEquals(0, testGatewayAllocator.getBatchIdToStoreShardBatch().size());
     }
 
-    public void testGetBatchId() {
+    public void testGetBatchIdExisting() {
         createIndexAndUpdateClusterState(2, 1020, 1);
         // get all shardsRoutings for test index
         List<ShardRouting> allShardRoutings1 = clusterState.routingTable().index(indexPrefix +0).getShards().values().stream().map(IndexShardRoutingTable::getShards)
@@ -234,6 +238,13 @@ public class GatewayAllocatorTests extends OpenSearchAllocationTestCase {
                 assertEquals(shardIdToBatchIdForStoreShards.get(shardRouting.shardId()), testGatewayAllocator.getBatchId(shardRouting, false));
             }
         }
+    }
+
+    public void testGetBatchIdNonExisting(){
+        createIndexAndUpdateClusterState(1, 1, 1);
+        List<ShardRouting> allShardRoutings = clusterState.routingTable().index(indexPrefix +0).getShards().values().stream().map(IndexShardRoutingTable::getShards)
+            .flatMap(List::stream).collect(Collectors.toList());
+        allShardRoutings.forEach(shard -> assertNull(testGatewayAllocator.getBatchId(shard, shard.primary())));
     }
 
     private void createIndexAndUpdateClusterState(int count, int numberOfShards, int numberOfReplicas){
