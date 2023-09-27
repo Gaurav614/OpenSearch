@@ -170,7 +170,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
     /**
      * Is the allocator responsible for allocating the given {@link ShardRouting}?
      */
-    private static boolean isResponsibleFor(final ShardRouting shard) {
+    protected static boolean isResponsibleFor(final ShardRouting shard) {
         return shard.primary() == false // must be a replica
             && shard.unassigned() // must be unassigned
             // if we are allocating a replica because of index creation, no need to go and find a copy, there isn't one...
@@ -188,12 +188,10 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
             return AllocateUnassignedDecision.NOT_TAKEN;
         }
 
-        final RoutingNodes routingNodes = allocation.routingNodes();
-        final boolean explain = allocation.debugDecision();
         // pre-check if it can be allocated to any node that currently exists, so we won't list the store for it for nothing
         Tuple<Decision, Map<String, NodeAllocationResult>> result = canBeAllocatedToAtLeastOneNode(unassignedShard, allocation);
         Decision allocateDecision = result.v1();
-        if (allocateDecision.type() != Decision.Type.YES && (explain == false || hasInitiatedFetching(unassignedShard) == false)) {
+        if (allocateDecision.type() != Decision.Type.YES && (allocation.debugDecision() == false || hasInitiatedFetching(unassignedShard) == false)) {
             // only return early if we are not in explain mode, or we are in explain mode but we have not
             // yet attempted to fetch any shard data
             logger.trace("{}: ignoring allocation, can't be allocated on any node", unassignedShard);
@@ -208,24 +206,35 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
             logger.trace("{}: ignoring allocation, still fetching shard stores", unassignedShard);
             allocation.setHasPendingAsyncFetch();
             List<NodeAllocationResult> nodeDecisions = null;
-            if (explain) {
+            if (allocation.debugDecision()) {
                 nodeDecisions = buildDecisionsForAllNodes(unassignedShard, allocation);
             }
             return AllocateUnassignedDecision.no(AllocationStatus.FETCHING_SHARD_DATA, nodeDecisions);
         }
+        NodeShardStores nodeShardStores = adaptToNodeShardStores(shardStores);
+        return getAllocationDecision(unassignedShard, allocation, nodeShardStores, result, logger);
+    }
 
+    protected AllocateUnassignedDecision getAllocationDecision(
+        ShardRouting unassignedShard,
+        RoutingAllocation allocation,
+        NodeShardStores nodeShardStores,
+        Tuple<Decision, Map<String, NodeAllocationResult>> allocationDecision,
+        Logger logger
+    ) {
+        final RoutingNodes routingNodes = allocation.routingNodes();
+        final boolean explain = allocation.debugDecision();
         ShardRouting primaryShard = routingNodes.activePrimary(unassignedShard.shardId());
         if (primaryShard == null) {
             assert explain : "primary should only be null here if we are in explain mode, so we didn't "
                 + "exit early when canBeAllocatedToAtLeastOneNode didn't return a YES decision";
             return AllocateUnassignedDecision.no(
-                UnassignedInfo.AllocationStatus.fromDecision(allocateDecision.type()),
-                new ArrayList<>(result.v2().values())
+                UnassignedInfo.AllocationStatus.fromDecision(allocationDecision.v1().type()),
+                new ArrayList<>(allocationDecision.v2().values())
             );
         }
         assert primaryShard.currentNodeId() != null;
         final DiscoveryNode primaryNode = allocation.nodes().get(primaryShard.currentNodeId());
-        NodeShardStores nodeShardStores = adaptToNodeShardStores(shardStores);
         final StoreFilesMetadata primaryStore = findStore(primaryNode, nodeShardStores);
         if (primaryStore == null) {
             // if we can't find the primary data, it is probably because the primary shard is corrupted (and listing failed)
@@ -247,9 +256,9 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         );
         assert explain == false || matchingNodes.nodeDecisions != null : "in explain mode, we must have individual node decisions";
 
-        List<NodeAllocationResult> nodeDecisions = augmentExplanationsWithStoreInfo(result.v2(), matchingNodes.nodeDecisions);
-        if (allocateDecision.type() != Decision.Type.YES) {
-            return AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.fromDecision(allocateDecision.type()), nodeDecisions);
+        List<NodeAllocationResult> nodeDecisions = augmentExplanationsWithStoreInfo(allocationDecision.v2(), matchingNodes.nodeDecisions);
+        if (allocationDecision.v1().type() != Decision.Type.YES) {
+            return AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.fromDecision(allocationDecision.v1().type()), nodeDecisions);
         } else if (matchingNodes.getNodeWithHighestMatch() != null) {
             RoutingNode nodeWithHighestMatch = allocation.routingNodes().node(matchingNodes.getNodeWithHighestMatch().getId());
             // we only check on THROTTLE since we checked before on NO

@@ -156,12 +156,6 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
         }
     }
 
-    private static boolean isResponsibleFor(final ShardRouting shard) {
-        return !shard.primary() // must be a replica
-            && shard.unassigned() // must be unassigned
-            // if we are allocating a replica because of index creation, no need to go and find a copy, there isn't one...
-            && shard.unassignedInfo().getReason() != UnassignedInfo.Reason.INDEX_CREATED;
-    }
 
     abstract protected FetchResult<NodeStoreFilesMetadataBatch> fetchData(Set<ShardRouting> shardEligibleForFetch,
                                                                           Set<ShardRouting> inEligibleShards,
@@ -232,93 +226,7 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
                 continue;
             }
             Tuple<Decision, Map<String, NodeAllocationResult>> result = nodeAllocationDecisions.get(unassignedShard);
-            ShardRouting primaryShard = routingNodes.activePrimary(unassignedShard.shardId());
-            if (primaryShard == null) {
-                assert explain : "primary should only be null here if we are in explain mode, so we didn't "
-                    + "exit early when canBeAllocatedToAtLeastOneNode didn't return a YES decision";
-                shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.no(
-                    UnassignedInfo.AllocationStatus.fromDecision(result.v1().type()),
-                    result.v2() != null ? new ArrayList<>(result.v2().values()) : null
-                ));
-                continue;
-            }
-            NodeShardStores nodeShardStores = getNodeShardStores(unassignedShard, shardsState);
-            assert primaryShard.currentNodeId() != null;
-            final DiscoveryNode primaryNode = allocation.nodes().get(primaryShard.currentNodeId());
-            final StoreFilesMetadata primaryStore = findStore(primaryNode, nodeShardStores);
-            if (primaryStore == null) {
-                // if we can't find the primary data, it is probably because the primary shard is corrupted (and listing failed)
-                // we want to let the replica be allocated in order to expose the actual problem with the primary that the replica
-                // will try and recover from
-                // Note, this is the existing behavior, as exposed in running CorruptFileTest#testNoPrimaryData
-                logger.trace("{}: no primary shard store found or allocated, letting actual allocation figure it out", unassignedShard);
-                shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.NOT_TAKEN);
-                continue;
-            }
-
-            // find the matching nodes
-            ReplicaShardAllocator.MatchingNodes matchingNodes = findMatchingNodes(
-                unassignedShard,
-                allocation,
-                false,
-                primaryNode,
-                primaryStore,
-                nodeShardStores,
-                explain
-            );
-
-            assert explain == false || matchingNodes.getNodeDecisions() != null : "in explain mode, we must have individual node decisions";
-
-            List<NodeAllocationResult> nodeDecisions = ReplicaShardAllocator.augmentExplanationsWithStoreInfo(result.v2(), matchingNodes.getNodeDecisions());
-            if (result.v1().type() != Decision.Type.YES) {
-                shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.fromDecision(result.v1().type()), nodeDecisions));
-                continue;
-            } else if (matchingNodes.getNodeWithHighestMatch() != null) {
-                RoutingNode nodeWithHighestMatch = allocation.routingNodes().node(matchingNodes.getNodeWithHighestMatch().getId());
-                // we only check on THROTTLE since we checked before on NO
-                Decision decision = allocation.deciders().canAllocate(unassignedShard, nodeWithHighestMatch, allocation);
-                if (decision.type() == Decision.Type.THROTTLE) {
-                    logger.debug(
-                        "[{}][{}]: throttling allocation [{}] to [{}] in order to reuse its unallocated persistent store",
-                        unassignedShard.index(),
-                        unassignedShard.id(),
-                        unassignedShard,
-                        nodeWithHighestMatch.node()
-                    );
-                    // we are throttling this, as we have enough other shards to allocate to this node, so ignore it for now
-                    shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.throttle(nodeDecisions));
-                } else {
-                    logger.debug(
-                        "[{}][{}]: allocating [{}] to [{}] in order to reuse its unallocated persistent store",
-                        unassignedShard.index(),
-                        unassignedShard.id(),
-                        unassignedShard,
-                        nodeWithHighestMatch.node()
-                    );
-                    // we found a match
-                    shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.yes(nodeWithHighestMatch.node(), null, nodeDecisions, true));
-                }
-                continue;
-            } else if (matchingNodes.hasAnyData() == false && unassignedShard.unassignedInfo().isDelayed()) {
-                // if we didn't manage to find *any* data (regardless of matching sizes), and the replica is
-                // unassigned due to a node leaving, so we delay allocation of this replica to see if the
-                // node with the shard copy will rejoin so we can re-use the copy it has
-                logger.debug("{}: allocation of [{}] is delayed", unassignedShard.shardId(), unassignedShard);
-                long remainingDelayMillis = 0L;
-                long totalDelayMillis = 0L;
-                if (explain) {
-                    UnassignedInfo unassignedInfo = unassignedShard.unassignedInfo();
-                    Metadata metadata = allocation.metadata();
-                    IndexMetadata indexMetadata = metadata.index(unassignedShard.index());
-                    totalDelayMillis = INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.get(indexMetadata.getSettings()).getMillis();
-                    long remainingDelayNanos = unassignedInfo.getRemainingDelay(System.nanoTime(), indexMetadata.getSettings());
-                    remainingDelayMillis = TimeValue.timeValueNanos(remainingDelayNanos).millis();
-                }
-                shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.delayed(remainingDelayMillis, totalDelayMillis, nodeDecisions));
-                continue;
-            }
-
-            shardAllocationDecisions.put(unassignedShard, AllocateUnassignedDecision.NOT_TAKEN);
+            shardAllocationDecisions.put(unassignedShard, getAllocationDecision(unassignedShard, allocation, getNodeShardStores(unassignedShard, shardsState), result, logger));
         }
         return shardAllocationDecisions;
     }
