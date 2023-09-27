@@ -86,6 +86,7 @@ import org.opensearch.index.seqno.RetentionLease;
 import org.opensearch.index.seqno.SequenceNumbers;
 import org.opensearch.index.translog.Translog;
 import org.opensearch.indices.replication.common.ReplicationType;
+import org.opensearch.indices.store.StoreFilesMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
 import org.opensearch.test.DummyShardLock;
 import org.opensearch.test.FeatureFlagSetter;
@@ -959,8 +960,8 @@ public class StoreTests extends OpenSearchTestCase {
                 )
             );
         }
-        TransportNodesListShardStoreMetadata.StoreFilesMetadata outStoreFileMetadata =
-            new TransportNodesListShardStoreMetadata.StoreFilesMetadata(
+        StoreFilesMetadata outStoreFileMetadata =
+            new StoreFilesMetadata(
                 new ShardId("test", "_na_", 0),
                 metadataSnapshot,
                 peerRecoveryRetentionLeases
@@ -973,8 +974,7 @@ public class StoreTests extends OpenSearchTestCase {
         ByteArrayInputStream inBuffer = new ByteArrayInputStream(outBuffer.toByteArray());
         InputStreamStreamInput in = new InputStreamStreamInput(inBuffer);
         in.setVersion(targetNodeVersion);
-        TransportNodesListShardStoreMetadata.StoreFilesMetadata inStoreFileMetadata =
-            new TransportNodesListShardStoreMetadata.StoreFilesMetadata(in);
+        StoreFilesMetadata inStoreFileMetadata = new StoreFilesMetadata(in);
         Iterator<StoreFileMetadata> outFiles = outStoreFileMetadata.iterator();
         for (StoreFileMetadata inFile : inStoreFileMetadata) {
             assertThat(inFile.name(), equalTo(outFiles.next().name()));
