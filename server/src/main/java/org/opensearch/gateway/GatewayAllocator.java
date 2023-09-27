@@ -410,6 +410,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             if (getBatchId(unassignedShard, unassignedShard.primary()) == null) {
                 createAndUpdateBatches(routingAllocation, unassignedShard.primary());
             }
+            assert getBatchId(unassignedShard, unassignedShard.primary()) != null;
             if (unassignedShard.primary()) {
                 assert primaryBatchShardAllocator != null;
                 return primaryBatchShardAllocator.makeAllocationDecision(unassignedShard, routingAllocation, logger);
