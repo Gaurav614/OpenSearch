@@ -95,6 +95,7 @@ import org.opensearch.discovery.SettingsBasedSeedHostsProvider;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.gateway.DanglingIndicesState;
+import org.opensearch.gateway.GatewayAllocator;
 import org.opensearch.gateway.GatewayService;
 import org.opensearch.gateway.PersistedClusterStateService;
 import org.opensearch.http.HttpTransportSettings;
@@ -312,6 +313,7 @@ public final class ClusterSettings extends AbstractScopedSettings {
                 GatewayService.RECOVER_AFTER_MASTER_NODES_SETTING,
                 GatewayService.RECOVER_AFTER_NODES_SETTING,
                 GatewayService.RECOVER_AFTER_TIME_SETTING,
+                GatewayAllocator.GATEWAY_ALLOCATOR_BATCH_SIZE,
                 PersistedClusterStateService.SLOW_WRITE_LOGGING_THRESHOLD,
                 NetworkModule.HTTP_DEFAULT_TYPE_SETTING,
                 NetworkModule.TRANSPORT_DEFAULT_TYPE_SETTING,
