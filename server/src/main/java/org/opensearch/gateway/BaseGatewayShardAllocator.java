@@ -86,35 +86,24 @@ public abstract class BaseGatewayShardAllocator {
         executeDecision(shardRouting, allocateUnassignedDecision, allocation, unassignedAllocationHandler);
     }
 
+    /**
+     * Allocate Set of unassigned shard  to nodes where valid copies of the shard already exists
+     * @param shards the shards to allocate
+     * @param allocation the allocation state container object
+     */
     public void allocateUnassignedBatch(Set<ShardRouting> shards, RoutingAllocation allocation) {
         // make Allocation Decisions for all shards
         HashMap<ShardRouting, AllocateUnassignedDecision> decisionMap = makeAllocationDecision(shards,
             allocation, logger);
         assert shards.size() == decisionMap.size() : "make allocation decision didn't return allocation decision for " +
             "some shards";
-        // get all unassigned shards
+        // get all unassigned shards iterator
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = allocation.routingNodes().unassigned().iterator();
 
         while (iterator.hasNext()) {
             ShardRouting shard = iterator.next();
             try {
                 if (decisionMap.isEmpty() == false) {
-//                    To be removed after all integ tests pass
-//                    if (shards.stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId()) &&
-//                        shardRouting.primary() == shard.primary()).count() == 1) {
-//                        List<ShardRouting> matchedShardRouting =
-//                            decisionMap.keySet().stream().filter(shardRouting -> shardRouting.shardId().equals(shard.shardId())
-//                                && shardRouting.primary() == shard.primary()).collect(Collectors.toList());
-//                        if (matchedShardRouting.size() == 1) {
-//                            executeDecision(shard,
-//                                decisionMap.remove(matchedShardRouting.get(0)),
-//                                allocation,
-//                                iterator);
-//                        } else if (matchedShardRouting.size() > 1){
-//                            // Adding this just to check the behaviour if we ever land up here.
-//                            throw new IllegalStateException("decision map must have single entry for 1 shard");
-//                        }
-//                    }
                     if (decisionMap.containsKey(shard)) {
                         executeDecision(shard,
                             decisionMap.remove(shard),
@@ -123,10 +112,9 @@ public abstract class BaseGatewayShardAllocator {
                     }
                 }
             } catch (Exception e) {
-                logger.error("failed to execute decision for shard {} ", shard, e);
+                logger.error("Failed to execute decision for shard {} ", shard, e);
             }
         }
-        logger.info("decision map size after execute {}", decisionMap.size());
     }
 
     private void executeDecision(ShardRouting shardRouting,
