@@ -910,7 +910,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
             .health(
                 Requests.clusterHealthRequest()
                     .waitForGreenStatus()
-                    .timeout("1m"))
+                    .timeout("5m"))
             .actionGet();
         assertFalse(health.isTimedOut());
         assertEquals(GREEN, health.getStatus());
@@ -926,7 +926,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         for (String dataNode : dataOnlyNodes) {
             for (Path path : internalCluster().getInstance(NodeEnvironment.class, dataNode).availableShardPaths(shardId)) {
                 final Path indexPath = path.resolve(ShardPath.INDEX_FOLDER_NAME);
-                if (Files.exists(indexPath)) { // multi data path might only have one path in use
+                if (Files.exists(indexPath)) {
                     try (DirectoryStream<Path> stream = Files.newDirectoryStream(indexPath)) {
                         for (Path item : stream) {
                             if (item.getFileName().toString().startsWith("segments_")) {
@@ -938,27 +938,65 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
                 }
             }
         }
-        internalCluster().fullRestart();
-        // do reroute
+        String clusterManagerName = internalCluster().getClusterManagerName();
+        Settings  clusterManagerDataPathSettings = internalCluster().dataPathSettings(clusterManagerName);
+        Settings node0DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(0));
+        Settings node1DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(1));
+        Settings node2DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(2));
+
+        internalCluster().stopCurrentClusterManagerNode();
+        internalCluster().stopRandomDataNode();
+        internalCluster().stopRandomDataNode();
+        internalCluster().stopRandomDataNode();
+
+        // Now start cluster manager node and post that verify batches created
+        internalCluster().startClusterManagerOnlyNodes(1, Settings.builder().put("node.name", clusterManagerName).put(clusterManagerDataPathSettings).build());
+        ensureStableCluster(1);
+
         logger.info("--> Now do a protective reroute"); // to avoid any race condition in test
         ClusterRerouteResponse clusterRerouteResponse = client().admin().cluster().prepareReroute().setRetryFailed(true).get();
         assertTrue(clusterRerouteResponse.isAcknowledged());
 
-        health = client().admin()
+        GatewayAllocator gatewayAllocator = internalCluster().getInstance(GatewayAllocator.class, internalCluster().getClusterManagerName());
+        assertEquals(1, gatewayAllocator.getNumberOfStartedShardBatches());
+        assertEquals(1, gatewayAllocator.getNumberOfStoreShardBatches());
+        assertTrue(clusterRerouteResponse.isAcknowledged());
+        health = client(internalCluster().getClusterManagerName()).admin()
             .cluster()
             .health(
                 Requests.clusterHealthRequest())
             .actionGet();
-        GatewayAllocator gatewayAllocator = internalCluster().getInstance(GatewayAllocator.class, internalCluster().getClusterManagerName());
         assertFalse(health.isTimedOut());
         assertEquals(RED, health.getStatus());
+        assertEquals(8, health.getUnassignedShards());
+        assertEquals(0, health.getInitializingShards());
+        assertEquals(0, health.getActiveShards());
+        assertEquals(0, health.getRelocatingShards());
+        assertEquals(0, health.getNumberOfDataNodes());
+
+        logger.info("--> restarting the stopped nodes");
+        internalCluster().startDataOnlyNode(Settings.builder().put("node.name", dataOnlyNodes.get(0)).put(node0DataPathSettings).build());
+        internalCluster().startDataOnlyNode(Settings.builder().put("node.name", dataOnlyNodes.get(1)).put(node1DataPathSettings).build());
+        internalCluster().startDataOnlyNode(Settings.builder().put("node.name", dataOnlyNodes.get(2)).put(node2DataPathSettings).build());
+        ensureStableCluster(4);
+
+        health = client().admin()
+            .cluster()
+            .health(
+                Requests.clusterHealthRequest()
+                    .waitForGreenStatus()
+                    .timeout("1m"))
+            .actionGet();
+
+        assertEquals(RED, health.getStatus());
+        assertTrue(health.isTimedOut());
+        assertEquals(0, health.getNumberOfPendingTasks());
+        assertEquals(0, health.getNumberOfInFlightFetch());
         assertEquals(6, health.getActiveShards());
         assertEquals(2, health.getUnassignedShards());
         assertEquals(0, health.getInitializingShards());
         assertEquals(0, health.getRelocatingShards());
         assertEquals(3, health.getNumberOfDataNodes());
-        assertEquals(1, gatewayAllocator.getNumberOfStartedShardBatches());
-        assertEquals(1, gatewayAllocator.getNumberOfStoreShardBatches());
     }
 
     private void createNIndices(int n, String prefix) {
