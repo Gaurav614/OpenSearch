@@ -9,7 +9,6 @@
 package org.opensearch.gateway;
 
 import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.routing.RoutingNode;
@@ -21,13 +20,9 @@ import org.opensearch.cluster.routing.allocation.NodeAllocationResult;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.cluster.routing.allocation.decider.Decision;
 import org.opensearch.common.collect.Tuple;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.common.unit.TimeValue;
 import org.opensearch.gateway.AsyncShardFetch.FetchResult;
-import org.opensearch.index.store.StoreFileMetadata;
 import org.opensearch.indices.store.StoreFilesMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
-import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch;
 
 import java.util.ArrayList;
@@ -39,8 +34,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.opensearch.cluster.routing.UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING;
-
+/**
+ * Allocates replica shards in a batch mode
+ *
+ * @opensearch.internal
+ */
 public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
 
     /**
@@ -49,7 +47,6 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
      * has to copy segment files.
      */
     public void processExistingRecoveries(RoutingAllocation allocation, List<Set<ShardRouting>> shardBatches) {
-        Metadata metadata = allocation.metadata();
         RoutingNodes routingNodes = allocation.routingNodes();
         List<Runnable> shardCancellationActions = new ArrayList<>();
         for (Set<ShardRouting> shardBatch : shardBatches) {
@@ -63,20 +60,7 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
                         ShardRouting shardFromRoutingNode = routingNode.getByShardId(shard.shardId());
                         if (!shardFromRoutingNode.primary()){
                             shardMatched = true;
-                            if (shardFromRoutingNode.primary()) {
-//                                ineligibleShards.add(shard);
-                                continue;
-                            }
-                            if (shardFromRoutingNode.initializing() == false) {
-                                continue;
-                            }
-                            if (shardFromRoutingNode.relocatingNodeId() != null) {
-                                continue;
-                            }
-
-                            // if we are allocating a replica because of index creation, no need to go and find a copy, there isn't one...
-                            if (shardFromRoutingNode.unassignedInfo() != null && shardFromRoutingNode.unassignedInfo()
-                                .getReason() == UnassignedInfo.Reason.INDEX_CREATED) {
+                            if (shouldSkipFetchForRecovery(shardFromRoutingNode)) {
                                 continue;
                             }
                             eligibleFetchShards.add(shardFromRoutingNode);
@@ -93,61 +77,11 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
                 continue; // still fetching
             }
             for (ShardRouting shard : eligibleFetchShards) {
-                ShardRouting primaryShard = allocation.routingNodes().activePrimary(shard.shardId());
-                assert primaryShard != null : "the replica shard can be allocated on at least one node, so there must be an active primary";
-                assert primaryShard.currentNodeId() != null;
-                final DiscoveryNode primaryNode = allocation.nodes().get(primaryShard.currentNodeId());
-                NodeShardStores nodeShardStores = getNodeShardStores(shard, shardState);
-                final StoreFilesMetadata primaryStore = findStore(primaryNode, nodeShardStores);
-                if (primaryStore == null) {
-                    // if we can't find the primary data, it is probably because the primary shard is corrupted (and listing failed)
-                    // just let the recovery find it out, no need to do anything about it for the initializing shard
-                    logger.trace("{}: no primary shard store found or allocated, letting actual allocation figure it out", shard);
-                    continue;
-                }
-                ReplicaShardAllocator.MatchingNodes matchingNodes = findMatchingNodes(shard, allocation, true, primaryNode, primaryStore, nodeShardStores, false);
-                if (matchingNodes.getNodeWithHighestMatch() != null) {
-                    DiscoveryNode currentNode = allocation.nodes().get(shard.currentNodeId());
-                    DiscoveryNode nodeWithHighestMatch = matchingNodes.getNodeWithHighestMatch();
-                    // current node will not be in matchingNodes as it is filtered away by SameShardAllocationDecider
-                    if (currentNode.equals(nodeWithHighestMatch) == false
-                        && matchingNodes.canPerformNoopRecovery(nodeWithHighestMatch)
-                        && canPerformOperationBasedRecovery(primaryStore, nodeShardStores, currentNode) == false) {
-                        // we found a better match that can perform noop recovery, cancel the existing allocation.
-                        logger.debug(
-                            "cancelling allocation of replica on [{}], can perform a noop recovery on node [{}]",
-                            currentNode,
-                            nodeWithHighestMatch
-                        );
-                        final Set<String> failedNodeIds = shard.unassignedInfo() == null
-                            ? Collections.emptySet()
-                            : shard.unassignedInfo().getFailedNodeIds();
-                        UnassignedInfo unassignedInfo = new UnassignedInfo(
-                            UnassignedInfo.Reason.REALLOCATED_REPLICA,
-                            "existing allocation of replica to ["
-                                + currentNode
-                                + "] cancelled, can perform a noop recovery on ["
-                                + nodeWithHighestMatch
-                                + "]",
-                            null,
-                            0,
-                            allocation.getCurrentNanoTime(),
-                            System.currentTimeMillis(),
-                            false,
-                            UnassignedInfo.AllocationStatus.NO_ATTEMPT,
-                            failedNodeIds
-                        );
-                        // don't cancel shard in the loop as it will cause a ConcurrentModificationException
-                        shardCancellationActions.add(
-                            () -> routingNodes.failShard(
-                                logger,
-                                shard,
-                                unassignedInfo,
-                                metadata.getIndexSafe(shard.index()),
-                                allocation.changes()
-                            )
-                        );
-                    }
+                Map<DiscoveryNode, StoreFilesMetadata> nodeShardStores = getNodeShardStores(shard, shardState);
+
+                Runnable cancellationAction = getShardCancellationAction(shard, allocation, nodeShardStores);
+                if (cancellationAction != null) {
+                    shardCancellationActions.add(cancellationAction);
                 }
             }
         }
@@ -207,7 +141,7 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
         }
 
         // Do not call fetchData if there are no eligible shards
-        if (shardsEligibleForFetch.size() == 0) {
+        if (shardsEligibleForFetch.isEmpty()) {
             return shardAllocationDecisions;
         }
         // only fetch data for eligible shards
@@ -231,14 +165,13 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
         return shardAllocationDecisions;
     }
 
-    private NodeShardStores getNodeShardStores(ShardRouting unassignedShard, FetchResult<NodeStoreFilesMetadataBatch> data) {
-        NodeShardStores nodeShardStores = new NodeShardStores();
-        if (data.getData() != null) {
-            nodeShardStores.getNodeShardStores().putAll(
-                data.getData().entrySet().stream().collect(Collectors.toMap(
-                    Map.Entry::getKey,
-                    entry -> new NodeShardStore(entry.getValue().getNodeStoreFilesMetadataBatch().get(unassignedShard.shardId()).storeFilesMetadata()))));
-        }
-        return nodeShardStores;
+    private Map<DiscoveryNode, StoreFilesMetadata> getNodeShardStores(ShardRouting unassignedShard, FetchResult<NodeStoreFilesMetadataBatch> data) {
+        assert data.hasData();
+        return new HashMap<>(
+            data.getData().entrySet().stream().collect(Collectors.toMap(
+                Map.Entry::getKey,
+                entry -> entry.getValue().getNodeStoreFilesMetadataBatch().get(unassignedShard.shardId()).storeFilesMetadata()
+            ))
+        );
     }
 }
