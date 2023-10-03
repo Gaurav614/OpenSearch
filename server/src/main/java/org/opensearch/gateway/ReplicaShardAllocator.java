@@ -366,7 +366,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
      * Takes the store info for nodes that have a shard store and adds them to the node decisions,
      * leaving the node explanations untouched for those nodes that do not have any store information.
      */
-    protected static List<NodeAllocationResult> augmentExplanationsWithStoreInfo(
+    private static List<NodeAllocationResult> augmentExplanationsWithStoreInfo(
         Map<String, NodeAllocationResult> nodeDecisions,
         Map<String, NodeAllocationResult> withShardStores
     ) {
@@ -387,7 +387,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
     /**
      * Finds the store for the assigned shard in the fetched data, returns null if none is found.
      */
-    protected static StoreFilesMetadata findStore(
+    private static StoreFilesMetadata findStore(
         DiscoveryNode node,
         Map<DiscoveryNode, StoreFilesMetadata> data
     ) {
@@ -397,7 +397,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         return data.get(node);
     }
 
-    protected MatchingNodes findMatchingNodes(
+    private MatchingNodes findMatchingNodes(
         ShardRouting shard,
         RoutingAllocation allocation,
         boolean noMatchFailedNodes,
@@ -483,7 +483,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         );
     }
 
-    protected static long computeMatchingBytes(
+    private static long computeMatchingBytes(
         StoreFilesMetadata primaryStore,
         StoreFilesMetadata storeFilesMetadata
     ) {
@@ -497,7 +497,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         return sizeMatched;
     }
 
-    protected static boolean hasMatchingSyncId(
+    private static boolean hasMatchingSyncId(
         StoreFilesMetadata primaryStore,
         StoreFilesMetadata replicaStore
     ) {
@@ -505,7 +505,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         return primarySyncId != null && primarySyncId.equals(replicaStore.syncId());
     }
 
-    protected static MatchingNode computeMatchingNode(
+    private static MatchingNode computeMatchingNode(
         DiscoveryNode primaryNode,
         StoreFilesMetadata primaryStore,
         DiscoveryNode replicaNode,
@@ -519,8 +519,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         return new MatchingNode(matchingBytes, retainingSeqNoForReplica, isNoopRecovery);
     }
 
-    // ToDo: Refactor following function
-    protected static boolean canPerformOperationBasedRecovery(
+    private static boolean canPerformOperationBasedRecovery(
         StoreFilesMetadata primaryStore,
         Map<DiscoveryNode, StoreFilesMetadata> shardStores,
         DiscoveryNode targetNode
@@ -546,7 +545,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
     /**
      * A class to enacapsulate the details regarding the a MatchNode for shard assignment
      */
-    public static class MatchingNode {
+    protected static class MatchingNode {
         static final Comparator<MatchingNode> COMPARATOR = Comparator.<MatchingNode, Boolean>comparing(m -> m.isNoopRecovery)
             .thenComparing(m -> m.retainingSeqNo)
             .thenComparing(m -> m.matchingBytes);
