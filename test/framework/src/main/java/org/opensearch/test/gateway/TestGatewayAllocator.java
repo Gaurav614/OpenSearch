@@ -35,6 +35,7 @@ package org.opensearch.test.gateway;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.cluster.routing.ShardRouting;
+import org.opensearch.cluster.routing.allocation.AllocateUnassignedDecision;
 import org.opensearch.cluster.routing.allocation.FailedShard;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.core.index.shard.ShardId;
@@ -109,7 +110,7 @@ public class TestGatewayAllocator extends GatewayAllocator {
     };
 
 
-    PrimaryShardBatchAllocator primaryShardBatchAllocator = new PrimaryShardBatchAllocator() {
+    PrimaryShardBatchAllocator primaryBatchShardAllocator = new PrimaryShardBatchAllocator() {
         @Override
         protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch> fetchData(Set<ShardRouting> shardsEligibleForFetch,
                                                                                                                                    Set<ShardRouting> inEligibleShards,
@@ -163,7 +164,7 @@ public class TestGatewayAllocator extends GatewayAllocator {
         }
     };
 
-    ReplicaShardBatchAllocator replicaShardBatchAllocator = new ReplicaShardBatchAllocator() {
+    ReplicaShardBatchAllocator replicaBatchShardAllocator = new ReplicaShardBatchAllocator() {
 
         @Override
         protected AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> fetchData(Set<ShardRouting> shardsEligibleForFetch,
@@ -216,7 +217,7 @@ public class TestGatewayAllocator extends GatewayAllocator {
     @Override
     public void allocateUnassignedBatch(RoutingAllocation allocation, boolean primary){
         currentNodes = allocation.nodes();
-        innerAllocateUnassignedBatch(allocation, primaryShardBatchAllocator, replicaShardBatchAllocator, primary);
+        innerAllocateUnassignedBatch(allocation, primaryBatchShardAllocator, replicaBatchShardAllocator, primary);
     }
 
     /**
@@ -258,5 +259,11 @@ public class TestGatewayAllocator extends GatewayAllocator {
 
     public Map<String, GatewayAllocator.ShardsBatch> getBatchIdToStoreShardBatch(){
         return batchIdToStoreShardBatch;
+    }
+
+    @Override
+    public AllocateUnassignedDecision explainUnassignedShardAllocation(ShardRouting unassignedShard, RoutingAllocation routingAllocation) {
+        setShardAllocators(primaryShardAllocator, replicaShardAllocator, primaryBatchShardAllocator, replicaBatchShardAllocator);
+        return super.explainUnassignedShardAllocation(unassignedShard, routingAllocation);
     }
 }

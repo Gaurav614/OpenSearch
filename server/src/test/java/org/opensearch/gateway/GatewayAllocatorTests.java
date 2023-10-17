@@ -19,6 +19,7 @@ import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.OpenSearchAllocationTestCase;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.cluster.routing.AllocationId;
 import org.opensearch.cluster.routing.IndexShardRoutingTable;
 import org.opensearch.cluster.routing.RecoverySource;
@@ -27,6 +28,8 @@ import org.opensearch.cluster.routing.RoutingTable;
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.routing.ShardRoutingState;
 import org.opensearch.cluster.routing.UnassignedInfo;
+import org.opensearch.cluster.routing.allocation.AllocationService;
+import org.opensearch.cluster.routing.allocation.FailedShard;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;
 import org.opensearch.common.collect.Tuple;
@@ -42,6 +45,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
+import static org.opensearch.cluster.routing.ShardRoutingState.UNASSIGNED;
 
 public class GatewayAllocatorTests extends OpenSearchAllocationTestCase {
 
@@ -245,6 +251,38 @@ public class GatewayAllocatorTests extends OpenSearchAllocationTestCase {
         List<ShardRouting> allShardRoutings = clusterState.routingTable().index(indexPrefix +0).getShards().values().stream().map(IndexShardRoutingTable::getShards)
             .flatMap(List::stream).collect(Collectors.toList());
         allShardRoutings.forEach(shard -> assertNull(testGatewayAllocator.getBatchId(shard, shard.primary())));
+    }
+
+    public void testExplainUnassignedForFailedShard() {
+        createIndexAndUpdateClusterState(2, 1, 1);
+        AllocationService allocation = createAllocationService();
+        clusterState = ClusterState.builder(clusterState)
+            .nodes(DiscoveryNodes.builder().add(newNode("node1")).add(newNode("node2")))
+            .build();
+        clusterState = allocation.reroute(clusterState, "reroute");
+        // starting primaries
+        clusterState = startInitializingShardsAndReroute(allocation, clusterState);
+        // starting replicas
+        clusterState = startInitializingShardsAndReroute(allocation, clusterState);
+        // fail shard
+        ShardRouting shardToFail = clusterState.getRoutingNodes().shardsWithState(STARTED).get(0);
+        clusterState = allocation.applyFailedShards(
+            clusterState,
+            Collections.singletonList(new FailedShard(shardToFail, "test fail", null, randomBoolean()))
+        );
+        // assert that batches are empty
+        assertEquals(0, testGatewayAllocator.getNumberOfStartedShardBatches());
+        assertEquals(0, testGatewayAllocator.getNumberOfStoreShardBatches());
+
+        // now calling allocation explain to ensure that batches are getting created
+        testAllocation.debugDecision(true);
+        logger.info(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED));
+        testGatewayAllocator.explainUnassignedShardAllocation(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).get(0), testAllocation);
+
+        // assert that new batches are created for failed shard
+        assertEquals(1, testGatewayAllocator.getNumberOfStartedShardBatches());
+        assertEquals(1, testGatewayAllocator.getNumberOfStoreShardBatches());
+
     }
 
     private void createIndexAndUpdateClusterState(int count, int numberOfShards, int numberOfReplicas){
