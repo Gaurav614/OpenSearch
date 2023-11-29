@@ -86,6 +86,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
     private static final Logger logger = LogManager.getLogger(GatewayAllocator.class);
     private final long maxBatchSize;
+    private final boolean batchMode;
 
     private  static final short DEFAULT_BATCH_SIZE = 2000;
 
@@ -139,6 +140,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         this.batchStoreAction = batchStoreAction;
         this.replicaBatchShardAllocator = new InternalReplicaBatchShardAllocator();
         this.maxBatchSize = GATEWAY_ALLOCATOR_BATCH_SIZE.get(settings);
+        this.batchMode = EXISTING_SHARDS_ALLOCATOR_BATCH_MODE_ENABLED.get(settings);
     }
 
     @Override
@@ -163,6 +165,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         this.batchStoreAction = null;
         this.replicaBatchShardAllocator = null;
         this.maxBatchSize = DEFAULT_BATCH_SIZE;
+        this.batchMode = true;
     }
 
     // for tests
@@ -225,8 +228,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
     @Override
     public void afterPrimariesBeforeReplicas(RoutingAllocation allocation) {
-        boolean batchMode = allocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT);
-        if (batchMode) {
+        if (this.batchMode) {
             assert replicaBatchShardAllocator != null;
             List<Set<ShardRouting>> storedShardBatches = batchIdToStoreShardBatch.values().stream()
                 .map(ShardsBatch::getBatchedShardRoutings)
@@ -415,8 +417,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     public AllocateUnassignedDecision explainUnassignedShardAllocation(ShardRouting unassignedShard, RoutingAllocation routingAllocation) {
         assert unassignedShard.unassigned();
         assert routingAllocation.debugDecision();
-        boolean batchMode = routingAllocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT);
-        if (batchMode) {
+        if (this.batchMode) {
             if (getBatchId(unassignedShard, unassignedShard.primary()) == null) {
                 createAndUpdateBatches(routingAllocation, unassignedShard.primary());
             }
