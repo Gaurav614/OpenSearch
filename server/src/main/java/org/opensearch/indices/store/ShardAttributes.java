@@ -18,7 +18,7 @@ import java.io.IOException;
 
 /**
  * This class contains Attributes related to Shards that are necessary for making the {@link org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch} transport requests
- *  
+ *
  * @opensearch.internal
  */
 public class ShardAttributes implements Writeable {

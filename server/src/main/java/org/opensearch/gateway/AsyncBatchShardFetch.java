@@ -37,8 +37,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static java.util.Collections.emptyMap;
-import static java.util.Collections.unmodifiableMap;
-import static java.util.Collections.unmodifiableSet;
 
 /**
  * Allows to asynchronously fetch batch of shards related data from other nodes for allocation, without blocking
@@ -57,13 +55,13 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
      * An action that lists the relevant shard data that needs to be fetched for batch of shards
      */
     public interface Lister<NodesResponse extends BaseNodesResponse<NodeResponse>, NodeResponse extends BaseNodeResponse> {
-        void list(DiscoveryNode[] nodes,Map<ShardId, String> shardIdsWithCustomDataPath, ActionListener<NodesResponse> listener);
+        void list(DiscoveryNode[] nodes, Map<ShardId, String> shardIdsWithCustomDataPath, ActionListener<NodesResponse> listener);
     }
 
     protected final Logger logger;
     protected final String type;
     private final String batchUUID;
-    protected Map<ShardId,String> shardsToCustomDataPathMap;
+    protected Map<ShardId, String> shardsToCustomDataPathMap;
     private final Map<ShardId, Set<String>> ignoredShardToNodes = new HashMap<>();
     private final AsyncBatchShardFetch.Lister<BaseNodesResponse<T>, T> action;
     private final Map<String, AsyncBatchShardFetch.NodeEntry<T>> cache = new HashMap<>();
@@ -115,7 +113,7 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
 
         // add the nodes to ignore to the list of nodes to ignore for each shard
         // This information is only used for retrying. Fetching is still a broadcast to all available nodes
-        for(Map.Entry <ShardId, Set<String>> ignoreNodesEntry : ignoreNodes.entrySet()){
+        for (Map.Entry<ShardId, Set<String>> ignoreNodesEntry : ignoreNodes.entrySet()) {
             Set<String> ignoreNodesSet = ignoredShardToNodes.getOrDefault(ignoreNodesEntry.getKey(), new HashSet<>());
             ignoreNodesSet.addAll(ignoreNodesEntry.getValue());
             ignoredShardToNodes.put(ignoreNodesEntry.getKey(), ignoreNodesSet);
@@ -174,9 +172,14 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
             // if at least one node failed, make sure to have a protective reroute
             // here, just case this round won't find anything, and we need to retry fetching data
             if (failedNodes.isEmpty() == false || allIgnoreNodes.values().stream().anyMatch(Set::isEmpty) == false) {
-                reroute(batchUUID,
-                    "nodes failed [" + failedNodes.size() + "], ignored [" + allIgnoreNodes.values().stream().
-                        mapToInt(Set::size).sum() + "]");
+                reroute(
+                    batchUUID,
+                    "nodes failed ["
+                        + failedNodes.size()
+                        + "], ignored ["
+                        + allIgnoreNodes.values().stream().mapToInt(Set::size).sum()
+                        + "]"
+                );
             }
 
             return new AsyncBatchShardFetch.FetchResult<>(fetchData, allIgnoreNodes);
@@ -380,7 +383,7 @@ public abstract class AsyncBatchShardFetch<T extends BaseNodeResponse> implement
          * Process any changes needed to the allocation based on this fetch result.
          */
         public void processAllocation(RoutingAllocation allocation) {
-            for(Map.Entry<ShardId, Set<String>> entry : ignoredShardToNodes.entrySet()) {
+            for (Map.Entry<ShardId, Set<String>> entry : ignoredShardToNodes.entrySet()) {
                 ShardId shardId = entry.getKey();
                 Set<String> ignoreNodes = entry.getValue();
                 if (ignoreNodes.isEmpty() == false) {

@@ -46,14 +46,9 @@ import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.cluster.routing.allocation.decider.Decision;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-import java.util.TreeMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collectors;
 
 /**
  * An abstract class that implements basic functionality for allocating
@@ -93,10 +88,8 @@ public abstract class BaseGatewayShardAllocator {
      */
     public void allocateUnassignedBatch(Set<ShardRouting> shards, RoutingAllocation allocation) {
         // make Allocation Decisions for all shards
-        HashMap<ShardRouting, AllocateUnassignedDecision> decisionMap = makeAllocationDecision(shards,
-            allocation, logger);
-        assert shards.size() == decisionMap.size() : "make allocation decision didn't return allocation decision for " +
-            "some shards";
+        HashMap<ShardRouting, AllocateUnassignedDecision> decisionMap = makeAllocationDecision(shards, allocation, logger);
+        assert shards.size() == decisionMap.size() : "make allocation decision didn't return allocation decision for " + "some shards";
         // get all unassigned shards iterator
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = allocation.routingNodes().unassigned().iterator();
 
@@ -105,22 +98,21 @@ public abstract class BaseGatewayShardAllocator {
             try {
                 if (decisionMap.isEmpty() == false) {
                     if (decisionMap.containsKey(shard)) {
-                        executeDecision(shard,
-                            decisionMap.remove(shard),
-                            allocation,
-                            iterator);
+                        executeDecision(shard, decisionMap.remove(shard), allocation, iterator);
                     }
                 }
             } catch (Exception e) {
-                logger.error("Failed to execute decision for shard {} ", shard, e);
+                logger.error("Failed to execute decision for shard {} ", shard);
             }
         }
     }
 
-    private void executeDecision(ShardRouting shardRouting,
-                                 AllocateUnassignedDecision allocateUnassignedDecision,
-                                 RoutingAllocation allocation,
-                                 ExistingShardsAllocator.UnassignedAllocationHandler unassignedAllocationHandler) {
+    private void executeDecision(
+        ShardRouting shardRouting,
+        AllocateUnassignedDecision allocateUnassignedDecision,
+        RoutingAllocation allocation,
+        ExistingShardsAllocator.UnassignedAllocationHandler unassignedAllocationHandler
+    ) {
         if (allocateUnassignedDecision.isDecisionTaken() == false) {
             // no decision was taken by this allocator
             return;
@@ -137,7 +129,6 @@ public abstract class BaseGatewayShardAllocator {
             unassignedAllocationHandler.removeAndIgnore(allocateUnassignedDecision.getAllocationStatus(), allocation.changes());
         }
     }
-
 
     protected long getExpectedShardSize(ShardRouting shardRouting, RoutingAllocation allocation) {
         if (shardRouting.primary()) {

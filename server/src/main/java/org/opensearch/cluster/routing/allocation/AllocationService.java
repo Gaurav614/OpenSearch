@@ -90,7 +90,7 @@ public class AllocationService {
     private static final Logger logger = LogManager.getLogger(AllocationService.class);
 
     private final AllocationDeciders allocationDeciders;
-    private  Settings settings;
+    private Settings settings;
     private Map<String, ExistingShardsAllocator> existingShardsAllocators;
     private final ShardsAllocator shardsAllocator;
     private final ClusterInfoService clusterInfoService;
@@ -135,6 +135,7 @@ public class AllocationService {
         this.snapshotsInfoService = snapshotsInfoService;
         this.settings = settings;
     }
+
     /**
      * Inject the {@link ExistingShardsAllocator}s to use. May only be called once.
      */
@@ -617,13 +618,13 @@ public class AllocationService {
         }
         RoutingNodes.UnassignedShards unassignedShards = allocation.routingNodes().unassigned();
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = unassignedShards.iterator();
-        ExistingShardsAllocator currentAllocatorForShard =null;
+        ExistingShardsAllocator currentAllocatorForShard = null;
         if (unassignedShards.size() > 0) {
             ShardRouting shard = iterator.next();
-            currentAllocatorForShard= getAllocatorForShard(shard, allocation);
-            while (iterator.hasNext()){
+            currentAllocatorForShard = getAllocatorForShard(shard, allocation);
+            while (iterator.hasNext()) {
                 ExistingShardsAllocator allocatorForShard = getAllocatorForShard(iterator.next(), allocation);
-                if (currentAllocatorForShard.getClass().getName().equals(allocatorForShard.getClass().getName())==false){
+                if (currentAllocatorForShard.getClass().getName().equals(allocatorForShard.getClass().getName()) == false) {
                     return null;
                 }
             }

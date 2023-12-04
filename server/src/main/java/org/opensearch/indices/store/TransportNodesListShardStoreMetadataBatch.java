@@ -22,23 +22,19 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.gateway.AsyncShardFetch;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
-import org.opensearch.index.seqno.ReplicationTracker;
-import org.opensearch.index.seqno.RetentionLease;
 import org.opensearch.index.shard.IndexShard;
-import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.shard.ShardPath;
 import org.opensearch.index.store.Store;
-import org.opensearch.index.store.StoreFileMetadata;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.TransportRequest;
@@ -47,7 +43,6 @@ import org.opensearch.transport.TransportService;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -111,7 +106,16 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         DiscoveryNode[] nodes,
         ActionListener<NodesStoreFilesMetadataBatch> listener
     ) {
-        execute(new TransportNodesListShardStoreMetadataBatch.Request(shardIdsWithCustomDataPath.entrySet().stream().map(entry -> new ShardAttributes(entry.getKey(), entry.getValue())).collect(Collectors.toList()), nodes), listener);
+        execute(
+            new TransportNodesListShardStoreMetadataBatch.Request(
+                shardIdsWithCustomDataPath.entrySet()
+                    .stream()
+                    .map(entry -> new ShardAttributes(entry.getKey(), entry.getValue()))
+                    .collect(Collectors.toList()),
+                nodes
+            ),
+            listener
+        );
     }
 
     @Override
@@ -138,7 +142,10 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         try {
             return new NodeStoreFilesMetadataBatch(clusterService.localNode(), listStoreMetadata(request));
         } catch (IOException e) {
-            throw new OpenSearchException("Failed to list store metadata for shards [" + request.getShardAttributes().stream().map(ShardAttributes::getShardId) + "]", e);
+            throw new OpenSearchException(
+                "Failed to list store metadata for shards [" + request.getShardAttributes().stream().map(ShardAttributes::getShardId) + "]",
+                e
+            );
         }
     }
 
@@ -148,7 +155,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
      */
     private Map<ShardId, NodeStoreFilesMetadata> listStoreMetadata(NodeRequest request) throws IOException {
         Map<ShardId, NodeStoreFilesMetadata> shardStoreMetadataMap = new HashMap<ShardId, NodeStoreFilesMetadata>();
-        for (ShardAttributes  shardAttributes : request.getShardAttributes()) {
+        for (ShardAttributes shardAttributes : request.getShardAttributes()) {
             final ShardId shardId = shardAttributes.getShardId();
             logger.trace("listing store meta data for {}", shardId);
             long startTimeNS = System.nanoTime();

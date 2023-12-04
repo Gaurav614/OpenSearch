@@ -23,15 +23,15 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.common.settings.Settings;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.shard.IndexShard;
-import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.shard.ShardPath;
 import org.opensearch.index.shard.ShardStateMetadata;
 import org.opensearch.index.store.Store;
@@ -143,7 +143,7 @@ public class TransportNodesListGatewayStartedBatchShards extends TransportNodesA
     @Override
     protected NodeGatewayStartedShardsBatch nodeOperation(NodeRequest request) {
         Map<ShardId, NodeGatewayStartedShards> shardsOnNode = new HashMap<>();
-        for (ShardAttributes shardAttr: request.shardAttributes) {
+        for (ShardAttributes shardAttr : request.shardAttributes) {
             final ShardId shardId = shardAttr.getShardId();
             try {
                 logger.trace("{} loading local shard state info", shardId);
@@ -238,8 +238,11 @@ public class TransportNodesListGatewayStartedBatchShards extends TransportNodesA
 
         public Request(DiscoveryNode[] nodes, Map<ShardId, String> shardIdStringMap) {
             super(nodes);
-            this.shardAttributes = Objects.requireNonNull(shardIdStringMap).entrySet().stream().map(entry ->
-                new ShardAttributes(entry.getKey(), entry.getValue())).collect(Collectors.toList());
+            this.shardAttributes = Objects.requireNonNull(shardIdStringMap)
+                .entrySet()
+                .stream()
+                .map(entry -> new ShardAttributes(entry.getKey(), entry.getValue()))
+                .collect(Collectors.toList());
         }
 
         @Override

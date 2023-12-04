@@ -9,7 +9,6 @@
 package org.opensearch.gateway;
 
 import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.routing.RoutingNode;
 import org.opensearch.cluster.routing.RoutingNodes;
@@ -58,7 +57,7 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
                 for (RoutingNode routingNode : routingNodes) {
                     if (routingNode.getByShardId(shard.shardId()) != null) {
                         ShardRouting shardFromRoutingNode = routingNode.getByShardId(shard.shardId());
-                        if (!shardFromRoutingNode.primary()){
+                        if (!shardFromRoutingNode.primary()) {
                             shardMatched = true;
                             if (shouldSkipFetchForRecovery(shardFromRoutingNode)) {
                                 continue;
@@ -66,12 +65,16 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
                             eligibleFetchShards.add(shardFromRoutingNode);
                         }
                     }
-                    if (shardMatched){
+                    if (shardMatched) {
                         break;
                     }
                 }
             }
-            AsyncShardFetch.FetchResult <NodeStoreFilesMetadataBatch> shardState = fetchData(eligibleFetchShards, ineligibleShards, allocation);
+            AsyncShardFetch.FetchResult<NodeStoreFilesMetadataBatch> shardState = fetchData(
+                eligibleFetchShards,
+                ineligibleShards,
+                allocation
+            );
             if (!shardState.hasData()) {
                 logger.trace("{}: fetching new stores for initializing shard batch", eligibleFetchShards);
                 continue; // still fetching
@@ -90,24 +93,31 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
         }
     }
 
-
-    abstract protected FetchResult<NodeStoreFilesMetadataBatch> fetchData(Set<ShardRouting> shardEligibleForFetch,
-                                                                          Set<ShardRouting> inEligibleShards,
-                                                                          RoutingAllocation allocation);
+    abstract protected FetchResult<NodeStoreFilesMetadataBatch> fetchData(
+        Set<ShardRouting> shardEligibleForFetch,
+        Set<ShardRouting> inEligibleShards,
+        RoutingAllocation allocation
+    );
 
     @Override
-    protected FetchResult<TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata> fetchData(ShardRouting shard, RoutingAllocation allocation) {
+    protected FetchResult<TransportNodesListShardStoreMetadata.NodeStoreFilesMetadata> fetchData(
+        ShardRouting shard,
+        RoutingAllocation allocation
+    ) {
         return null;
     }
 
     @Override
     public AllocateUnassignedDecision makeAllocationDecision(ShardRouting unassignedShard, RoutingAllocation allocation, Logger logger) {
-        return makeAllocationDecision(new HashSet<>(Collections.singletonList(unassignedShard)),
-            allocation, logger).get(unassignedShard);
+        return makeAllocationDecision(new HashSet<>(Collections.singletonList(unassignedShard)), allocation, logger).get(unassignedShard);
     }
 
     @Override
-    public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(Set<ShardRouting> shards, RoutingAllocation allocation, Logger logger) {
+    public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(
+        Set<ShardRouting> shards,
+        RoutingAllocation allocation,
+        Logger logger
+    ) {
         HashMap<ShardRouting, AllocateUnassignedDecision> shardAllocationDecisions = new HashMap<>();
         final boolean explain = allocation.debugDecision();
         final RoutingNodes routingNodes = allocation.routingNodes();
@@ -128,9 +138,13 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
                 // only return early if we are not in explain mode, or we are in explain mode but we have not
                 // yet attempted to fetch any shard data
                 logger.trace("{}: ignoring allocation, can't be allocated on any node", shard);
-                shardAllocationDecisions.put(shard,
-                    AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.fromDecision(allocationDecision.type()),
-                        result.v2() != null ? new ArrayList<>(result.v2().values()) : null));
+                shardAllocationDecisions.put(
+                    shard,
+                    AllocateUnassignedDecision.no(
+                        UnassignedInfo.AllocationStatus.fromDecision(allocationDecision.type()),
+                        result.v2() != null ? new ArrayList<>(result.v2().values()) : null
+                    )
+                );
                 continue;
             }
             // storing the nodeDecisions in nodeAllocationDecisions if the decision is not YES
@@ -145,7 +159,11 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
             return shardAllocationDecisions;
         }
         // only fetch data for eligible shards
-        final FetchResult<NodeStoreFilesMetadataBatch> shardsState = fetchData(shardsEligibleForFetch, shardsNotEligibleForFetch, allocation);
+        final FetchResult<NodeStoreFilesMetadataBatch> shardsState = fetchData(
+            shardsEligibleForFetch,
+            shardsNotEligibleForFetch,
+            allocation
+        );
 
         for (ShardRouting unassignedShard : shardsEligibleForFetch) {
             if (!shardsState.hasData()) {
@@ -155,23 +173,36 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
                 if (explain) {
                     nodeDecisions = buildDecisionsForAllNodes(unassignedShard, allocation);
                 }
-                shardAllocationDecisions.put(unassignedShard,
-                    AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.FETCHING_SHARD_DATA, nodeDecisions));
+                shardAllocationDecisions.put(
+                    unassignedShard,
+                    AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.FETCHING_SHARD_DATA, nodeDecisions)
+                );
                 continue;
             }
             Tuple<Decision, Map<String, NodeAllocationResult>> result = nodeAllocationDecisions.get(unassignedShard);
-            shardAllocationDecisions.put(unassignedShard, getAllocationDecision(unassignedShard, allocation, getNodeShardStores(unassignedShard, shardsState), result, logger));
+            shardAllocationDecisions.put(
+                unassignedShard,
+                getAllocationDecision(unassignedShard, allocation, getNodeShardStores(unassignedShard, shardsState), result, logger)
+            );
         }
         return shardAllocationDecisions;
     }
 
-    private Map<DiscoveryNode, StoreFilesMetadata> getNodeShardStores(ShardRouting unassignedShard, FetchResult<NodeStoreFilesMetadataBatch> data) {
+    private Map<DiscoveryNode, StoreFilesMetadata> getNodeShardStores(
+        ShardRouting unassignedShard,
+        FetchResult<NodeStoreFilesMetadataBatch> data
+    ) {
         assert data.hasData();
         return new HashMap<>(
-            data.getData().entrySet().stream().collect(Collectors.toMap(
-                Map.Entry::getKey,
-                entry -> entry.getValue().getNodeStoreFilesMetadataBatch().get(unassignedShard.shardId()).storeFilesMetadata()
-            ))
+            data.getData()
+                .entrySet()
+                .stream()
+                .collect(
+                    Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().getNodeStoreFilesMetadataBatch().get(unassignedShard.shardId()).storeFilesMetadata()
+                    )
+                )
         );
     }
 }

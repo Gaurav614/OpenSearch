@@ -6,30 +6,6 @@
  * compatible open source license.
  */
 
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
 package org.opensearch.gateway;
 
 import org.apache.logging.log4j.Logger;
@@ -83,7 +59,8 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
         ShardRouting shard,
         RoutingAllocation allocation
     ) {
-        return null;
+        logger.error("fetchData for single shard called via batch allocator");
+        throw new IllegalStateException("PrimaryShardBatchAllocator should only be used for a batch of shards");
     }
 
     @Override
@@ -108,8 +85,8 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
     ) {
         HashMap<ShardRouting, AllocateUnassignedDecision> shardAllocationDecisions = new HashMap<>();
         final boolean explain = allocation.debugDecision();
-        Set<ShardRouting> shardsEligibleForFetch = new HashSet<>();
-        Set<ShardRouting> shardsNotEligibleForFetch = new HashSet<>();
+        Set<ShardRouting> eligibleShards = new HashSet<>();
+        Set<ShardRouting> inEligibleShards = new HashSet<>();
         // identify ineligible shards
         for (ShardRouting shard : shards) {
             ShardRouting matchingShard = null;
@@ -125,29 +102,26 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
             }
             AllocateUnassignedDecision decision = getInEligibleShardDecision(matchingShard, allocation);
             if (decision != null) {
-                shardsNotEligibleForFetch.add(shard);
+                inEligibleShards.add(shard);
                 shardAllocationDecisions.put(shard, decision);
             } else {
-                shardsEligibleForFetch.add(shard);
+                //
+                eligibleShards.add(shard);
             }
         }
         // Do not call fetchData if there are no eligible shards
-        if (shardsEligibleForFetch.size() == 0) {
+        if (eligibleShards.isEmpty()) {
             return shardAllocationDecisions;
         }
         // only fetch data for eligible shards
-        final FetchResult<NodeGatewayStartedShardsBatch> shardsState = fetchData(
-            shardsEligibleForFetch,
-            shardsNotEligibleForFetch,
-            allocation
-        );
+        final FetchResult<NodeGatewayStartedShardsBatch> shardsState = fetchData(eligibleShards, inEligibleShards, allocation);
         // Note : shardsState contain the Data, there key is DiscoveryNode but value is Map<ShardId,
         // NodeGatewayStartedShardsBatch> so to get one shard level data (from all the nodes), we'll traverse the map
         // and construct the nodeShardState along the way before making any allocation decision. As metadata for a
         // particular shard is needed from all the discovery nodes.
 
         // process the received data
-        for (ShardRouting unassignedShard : shardsEligibleForFetch) {
+        for (ShardRouting unassignedShard : eligibleShards) {
             if (shardsState.hasData() == false) {
                 // if fetching is not done, add that no decision in the resultant map
                 allocation.setHasPendingAsyncFetch();

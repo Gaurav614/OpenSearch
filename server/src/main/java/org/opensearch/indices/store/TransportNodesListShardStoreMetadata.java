@@ -52,18 +52,14 @@ import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.gateway.AsyncShardFetch;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
-import org.opensearch.index.seqno.ReplicationTracker;
-import org.opensearch.index.seqno.RetentionLease;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.ShardPath;
 import org.opensearch.index.store.Store;
-import org.opensearch.index.store.StoreFileMetadata;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.TransportRequest;
@@ -71,7 +67,6 @@ import org.opensearch.transport.TransportService;
 
 import java.io.IOException;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -126,8 +121,12 @@ public class TransportNodesListShardStoreMetadata extends TransportNodesAction<
     }
 
     @Override
-    public void list(Map<ShardId, String> shardIdsWithCustomDataPath, DiscoveryNode[] nodes, ActionListener<NodesStoreFilesMetadata> listener) {
-        assert shardIdsWithCustomDataPath.size() == 1 :  "only one shard should be specified";
+    public void list(
+        Map<ShardId, String> shardIdsWithCustomDataPath,
+        DiscoveryNode[] nodes,
+        ActionListener<NodesStoreFilesMetadata> listener
+    ) {
+        assert shardIdsWithCustomDataPath.size() == 1 : "only one shard should be specified";
         final ShardId shardId = shardIdsWithCustomDataPath.keySet().iterator().next();
         final String customDataPath = shardIdsWithCustomDataPath.get(shardId);
         execute(new Request(shardId, customDataPath, nodes), listener);
