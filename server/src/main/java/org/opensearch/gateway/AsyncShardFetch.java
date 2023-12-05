@@ -173,7 +173,7 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
                     "for non-batch mode" );
             }
             if(ignoreNodes.size() == 1) {
-                if (shardAttributesMap.containsKey(ignoreNodes.keySet().iterator().next())) {
+                if (shardAttributesMap.containsKey(ignoreNodes.keySet().iterator().next()) == false) {
                     throw new IllegalStateException("Shard Id must be same as initialized in AsyncShardFetch. Expecting = " + reroutingKey);
                 }
             }
