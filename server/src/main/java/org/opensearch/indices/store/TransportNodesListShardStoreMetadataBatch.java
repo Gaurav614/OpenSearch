@@ -132,7 +132,10 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         try {
             return new NodeStoreFilesMetadataBatch(clusterService.localNode(), listStoreMetadata(request));
         } catch (IOException e) {
-            throw new OpenSearchException("Failed to list store metadata for shards [" + request.getShardAttributes().keySet().stream().map(ShardId::toString) + "]", e);
+            throw new OpenSearchException(
+                "Failed to list store metadata for shards [" + request.getShardAttributes().keySet().stream().map(ShardId::toString) + "]",
+                e
+            );
         }
     }
 
@@ -142,7 +145,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
      */
     private Map<ShardId, NodeStoreFilesMetadata> listStoreMetadata(NodeRequest request) throws IOException {
         Map<ShardId, NodeStoreFilesMetadata> shardStoreMetadataMap = new HashMap<ShardId, NodeStoreFilesMetadata>();
-        for (ShardAttributes  shardAttributes : request.getShardAttributes().values()) {
+        for (ShardAttributes shardAttributes : request.getShardAttributes().values()) {
             final ShardId shardId = shardAttributes.getShardId();
             logger.trace("listing store meta data for {}", shardId);
             long startTimeNS = System.nanoTime();
@@ -287,7 +290,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            out.writeMap(shardAttributes, (o,k)-> k.writeTo(o), (o,v) -> v.writeTo(o));
+            out.writeMap(shardAttributes, (o, k) -> k.writeTo(o), (o, v) -> v.writeTo(o));
         }
     }
 
@@ -399,7 +402,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            out.writeMap(shardAttributes, (o,k)-> k.writeTo(o), (o,v) -> v.writeTo(o));
+            out.writeMap(shardAttributes, (o, k) -> k.writeTo(o), (o, v) -> v.writeTo(o));
         }
 
         public Map<ShardId, ShardAttributes> getShardAttributes() {

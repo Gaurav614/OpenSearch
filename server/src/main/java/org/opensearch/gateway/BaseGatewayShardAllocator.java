@@ -90,7 +90,8 @@ public abstract class BaseGatewayShardAllocator {
     public void allocateUnassignedBatch(Set<ShardRouting> shardRoutings, RoutingAllocation allocation) {
         // make Allocation Decisions for all shards
         HashMap<ShardRouting, AllocateUnassignedDecision> decisionMap = makeAllocationDecision(shardRoutings, allocation, logger);
-        assert shardRoutings.size() == decisionMap.size() : "make allocation decision didn't return allocation decision for " + "some shards";
+        assert shardRoutings.size() == decisionMap.size() : "make allocation decision didn't return allocation decision for "
+            + "some shards";
         // get all unassigned shards iterator
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = allocation.routingNodes().unassigned().iterator();
 
@@ -165,11 +166,13 @@ public abstract class BaseGatewayShardAllocator {
         Logger logger
     ) {
 
-        return (HashMap<ShardRouting, AllocateUnassignedDecision>) unassignedShardBatch
-            .stream()
-            .collect(Collectors.toMap(
-                unassignedShard -> unassignedShard,
-                unassignedShard -> makeAllocationDecision(unassignedShard, allocation, logger)));
+        return (HashMap<ShardRouting, AllocateUnassignedDecision>) unassignedShardBatch.stream()
+            .collect(
+                Collectors.toMap(
+                    unassignedShard -> unassignedShard,
+                    unassignedShard -> makeAllocationDecision(unassignedShard, allocation, logger)
+                )
+            );
     }
 
     /**

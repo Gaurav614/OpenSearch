@@ -142,7 +142,7 @@ public class TransportNodesListGatewayStartedBatchShards extends TransportNodesA
     @Override
     protected NodeGatewayStartedShardsBatch nodeOperation(NodeRequest request) {
         Map<ShardId, NodeGatewayStartedShards> shardsOnNode = new HashMap<>();
-        for (ShardAttributes shardAttr: request.shardAttributes.values()) {
+        for (ShardAttributes shardAttr : request.shardAttributes.values()) {
             final ShardId shardId = shardAttr.getShardId();
             try {
                 logger.trace("{} loading local shard state info", shardId);
@@ -243,7 +243,7 @@ public class TransportNodesListGatewayStartedBatchShards extends TransportNodesA
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            out.writeMap(shardAttributes, (o,k)-> k.writeTo(o), (o,v) -> v.writeTo(o));
+            out.writeMap(shardAttributes, (o, k) -> k.writeTo(o), (o, v) -> v.writeTo(o));
         }
 
         public Map<ShardId, ShardAttributes> getShardAttributes() {
@@ -303,7 +303,7 @@ public class TransportNodesListGatewayStartedBatchShards extends TransportNodesA
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            out.writeMap(shardAttributes, (o,k)-> k.writeTo(o), (o,v) -> v.writeTo(o));
+            out.writeMap(shardAttributes, (o, k) -> k.writeTo(o), (o, v) -> v.writeTo(o));
         }
     }
 

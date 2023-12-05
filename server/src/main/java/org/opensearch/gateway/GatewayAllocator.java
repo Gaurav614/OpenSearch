@@ -332,9 +332,13 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         while (iterator.hasNext()) {
             ShardRouting currentShard = iterator.next();
             if (batchSize > 0) {
-                ShardEntry sharEntry = new ShardEntry(new ShardAttributes(currentShard.shardId(),
-                    IndexMetadata.INDEX_DATA_PATH_SETTING.get(allocation.metadata().index(currentShard.index()).getSettings()))
-                    , currentShard);
+                ShardEntry sharEntry = new ShardEntry(
+                    new ShardAttributes(
+                        currentShard.shardId(),
+                        IndexMetadata.INDEX_DATA_PATH_SETTING.get(allocation.metadata().index(currentShard.index()).getSettings())
+                    ),
+                    currentShard
+                );
                 addToCurrentBatch.put(currentShard.shardId(), sharEntry);
                 batchSize--;
                 iterator.remove();
@@ -567,11 +571,12 @@ public class GatewayAllocator implements ExistingShardsAllocator {
     }
 
     class InternalBatchAsyncFetch<T extends BaseNodeResponse> extends AsyncShardFetch<T> {
-        InternalBatchAsyncFetch(Logger logger,
-                                String type,
-                                Map<ShardId, ShardAttributes> map,
-                                AsyncShardFetch.Lister<? extends BaseNodesResponse<T>, T> action,
-                                String batchUUId
+        InternalBatchAsyncFetch(
+            Logger logger,
+            String type,
+            Map<ShardId, ShardAttributes> map,
+            AsyncShardFetch.Lister<? extends BaseNodesResponse<T>, T> action,
+            String batchUUId
         ) {
             super(logger, type, map, action, batchUUId);
         }
@@ -804,10 +809,9 @@ public class GatewayAllocator implements ExistingShardsAllocator {
             this.batchId = batchId;
             this.batchInfo = new HashMap<>(shardsWithInfo);
             // create a ShardId -> customDataPath map for async fetch
-            Map<ShardId, ShardAttributes> shardIdsMap = batchInfo.entrySet().stream().collect(Collectors.toMap(
-                Map.Entry::getKey,
-                entry -> entry.getValue().getShardAttributes()
-            ));
+            Map<ShardId, ShardAttributes> shardIdsMap = batchInfo.entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getShardAttributes()));
             this.primary = primary;
             if (primary) {
                 asyncBatch = new InternalBatchAsyncFetch<>(logger, "batch_shards_started", shardIdsMap, batchStartedAction, batchId);
