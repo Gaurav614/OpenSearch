@@ -47,7 +47,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * Transport action for fetching the batch of shard stores Metadata from a list of transport nodes
@@ -102,20 +101,11 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
 
     @Override
     public void list(
-        Map<ShardId, String> shardIdsWithCustomDataPath,
+        Map<ShardId, ShardAttributes> shardAttributes,
         DiscoveryNode[] nodes,
         ActionListener<NodesStoreFilesMetadataBatch> listener
     ) {
-        execute(
-            new TransportNodesListShardStoreMetadataBatch.Request(
-                shardIdsWithCustomDataPath.entrySet()
-                    .stream()
-                    .map(entry -> new ShardAttributes(entry.getKey(), entry.getValue()))
-                    .collect(Collectors.toList()),
-                nodes
-            ),
-            listener
-        );
+        execute(new TransportNodesListShardStoreMetadataBatch.Request(shardAttributes, nodes), listener);
     }
 
     @Override
@@ -142,10 +132,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         try {
             return new NodeStoreFilesMetadataBatch(clusterService.localNode(), listStoreMetadata(request));
         } catch (IOException e) {
-            throw new OpenSearchException(
-                "Failed to list store metadata for shards [" + request.getShardAttributes().stream().map(ShardAttributes::getShardId) + "]",
-                e
-            );
+            throw new OpenSearchException("Failed to list store metadata for shards [" + request.getShardAttributes().keySet().stream().map(ShardId::toString) + "]", e);
         }
     }
 
@@ -155,7 +142,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
      */
     private Map<ShardId, NodeStoreFilesMetadata> listStoreMetadata(NodeRequest request) throws IOException {
         Map<ShardId, NodeStoreFilesMetadata> shardStoreMetadataMap = new HashMap<ShardId, NodeStoreFilesMetadata>();
-        for (ShardAttributes shardAttributes : request.getShardAttributes()) {
+        for (ShardAttributes  shardAttributes : request.getShardAttributes().values()) {
             final ShardId shardId = shardAttributes.getShardId();
             logger.trace("listing store meta data for {}", shardId);
             long startTimeNS = System.nanoTime();
@@ -281,26 +268,26 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
      */
     public static class Request extends BaseNodesRequest<Request> {
 
-        private final List<ShardAttributes> shardAttributes;
+        private final Map<ShardId, ShardAttributes> shardAttributes;
 
         public Request(StreamInput in) throws IOException {
             super(in);
-            shardAttributes = in.readList(ShardAttributes::new);
+            shardAttributes = in.readMap(ShardId::new, ShardAttributes::new);
         }
 
-        public Request(List<ShardAttributes> shardAttributes, DiscoveryNode[] nodes) {
+        public Request(Map<ShardId, ShardAttributes> shardAttributes, DiscoveryNode[] nodes) {
             super(nodes);
             this.shardAttributes = Objects.requireNonNull(shardAttributes);
         }
 
-        public List<ShardAttributes> getShardAttributes() {
+        public Map<ShardId, ShardAttributes> getShardAttributes() {
             return shardAttributes;
         }
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            out.writeList(shardAttributes);
+            out.writeMap(shardAttributes, (o,k)-> k.writeTo(o), (o,v) -> v.writeTo(o));
         }
     }
 
@@ -398,11 +385,11 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
      */
     public static class NodeRequest extends TransportRequest {
 
-        private final List<ShardAttributes> shardAttributes;
+        private final Map<ShardId, ShardAttributes> shardAttributes;
 
         public NodeRequest(StreamInput in) throws IOException {
             super(in);
-            shardAttributes = in.readList(ShardAttributes::new);
+            shardAttributes = in.readMap(ShardId::new, ShardAttributes::new);
         }
 
         public NodeRequest(Request request) {
@@ -412,10 +399,10 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            out.writeList(shardAttributes);
+            out.writeMap(shardAttributes, (o,k)-> k.writeTo(o), (o,v) -> v.writeTo(o));
         }
 
-        public List<ShardAttributes> getShardAttributes() {
+        public Map<ShardId, ShardAttributes> getShardAttributes() {
             return shardAttributes;
         }
     }
