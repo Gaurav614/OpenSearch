@@ -140,7 +140,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         this.batchStoreAction = batchStoreAction;
         this.replicaBatchShardAllocator = new InternalReplicaBatchShardAllocator();
         this.maxBatchSize = GATEWAY_ALLOCATOR_BATCH_SIZE.get(settings);
-        this.batchMode = EXISTING_SHARDS_ALLOCATOR_BATCH_MODE_ENABLED.get(settings);
+        this.batchMode = EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.get(settings);
     }
 
     @Override
