@@ -89,23 +89,11 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
         Set<ShardRouting> inEligibleShards = new HashSet<>();
         // identify ineligible shards
         for (ShardRouting shard : shards) {
-            ShardRouting matchingShard = null;
-            for (RoutingNode node : allocation.routingNodes()) {
-                matchingShard = node.getByShardId(shard.shardId());
-                if (matchingShard != null && matchingShard.primary() == shard.primary()) {
-                    // we have a matching shard on this node, so this is a valid copy
-                    break;
-                }
-            }
-            if (matchingShard == null) {
-                matchingShard = shard;
-            }
-            AllocateUnassignedDecision decision = getInEligibleShardDecision(matchingShard, allocation);
+            AllocateUnassignedDecision decision = getInEligibleShardDecision(shard, allocation);
             if (decision != null) {
                 inEligibleShards.add(shard);
                 shardAllocationDecisions.put(shard, decision);
             } else {
-                //
                 eligibleShards.add(shard);
             }
         }
@@ -135,7 +123,7 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
                 );
             } else {
 
-                List<NodeShardState> nodeShardStates = getNodeShardStates(unassignedShard, shardsState);
+                List<NodeShardState> nodeShardStates = adaptToNodeShardStates(unassignedShard, shardsState);
                 // get allocation decision for this shard
                 shardAllocationDecisions.put(unassignedShard, getAllocationDecision(unassignedShard, allocation, nodeShardStates, logger));
             }
@@ -143,7 +131,17 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
         return shardAllocationDecisions;
     }
 
-    private static List<NodeShardState> getNodeShardStates(
+    /**
+     * shardsState contain the Data, there key is DiscoveryNode but value is Map<ShardId,
+     * NodeGatewayStartedShardsBatch> so to get one shard level data (from all the nodes), we'll traverse the map
+     * and construct the nodeShardState along the way before making any allocation decision. As metadata for a
+     * particular shard is needed from all the discovery nodes.
+     *
+     * @param unassignedShard unassigned shard
+     * @param shardsState fetch data result for the whole batch
+     * @return shard state returned from each node
+     */
+    private static List<NodeShardState> adaptToNodeShardStates(
         ShardRouting unassignedShard,
         FetchResult<NodeGatewayStartedShardsBatch> shardsState
     ) {
