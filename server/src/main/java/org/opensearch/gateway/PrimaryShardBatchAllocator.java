@@ -102,10 +102,6 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
         }
         // only fetch data for eligible shards
         final FetchResult<NodeGatewayStartedShardsBatch> shardsState = fetchData(eligibleShards, inEligibleShards, allocation);
-        // Note : shardsState contain the Data, there key is DiscoveryNode but value is Map<ShardId,
-        // NodeGatewayStartedShardsBatch> so to get one shard level data (from all the nodes), we'll traverse the map
-        // and construct the nodeShardState along the way before making any allocation decision. As metadata for a
-        // particular shard is needed from all the discovery nodes.
 
         // process the received data
         for (ShardRouting unassignedShard : eligibleShards) {
@@ -121,7 +117,6 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
                     AllocateUnassignedDecision.no(AllocationStatus.FETCHING_SHARD_DATA, nodeDecisions)
                 );
             } else {
-
                 List<NodeShardState> nodeShardStates = adaptToNodeShardStates(unassignedShard, shardsState);
                 // get allocation decision for this shard
                 shardAllocationDecisions.put(unassignedShard, getAllocationDecision(unassignedShard, allocation, nodeShardStates, logger));
@@ -131,8 +126,8 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
     }
 
     /**
-     * shardsState contain the Data, there key is DiscoveryNode but value is Map<ShardId,
-     * NodeGatewayStartedShardsBatch> so to get one shard level data (from all the nodes), we'll traverse the map
+     * shardsState contain the Data, there key is DiscoveryNode but value is Map of ShardId
+     * and NodeGatewayStartedShardsBatch so to get one shard level data (from all the nodes), we'll traverse the map
      * and construct the nodeShardState along the way before making any allocation decision. As metadata for a
      * particular shard is needed from all the discovery nodes.
      *
