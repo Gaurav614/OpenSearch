@@ -764,8 +764,8 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ClusterRerouteResponse clusterRerouteResponse = client().admin().cluster().prepareReroute().setRetryFailed(true).get();
         assertTrue(clusterRerouteResponse.isAcknowledged());
 
-        GatewayAllocator gatewayAllocator = internalCluster().getInstance(
-            GatewayAllocator.class,
+        ShardsBatchGatewayAllocator gatewayAllocator = internalCluster().getInstance(
+            ShardsBatchGatewayAllocator.class,
             internalCluster().getClusterManagerName()
         );
         assertTrue(ExistingShardsAllocator.EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.get(internalCluster().clusterService().getSettings()));
@@ -804,13 +804,14 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ClusterRerouteResponse clusterRerouteResponse = client().admin().cluster().prepareReroute().setRetryFailed(true).get();
         assertTrue(clusterRerouteResponse.isAcknowledged());
 
-        GatewayAllocator gatewayAllocator = internalCluster().getInstance(
-            GatewayAllocator.class,
+        ShardsBatchGatewayAllocator gatewayAllocator = internalCluster().getInstance(
+            ShardsBatchGatewayAllocator.class,
             internalCluster().getClusterManagerName()
         );
         ensureRed("test");
 
         assertFalse(ExistingShardsAllocator.EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.get(internalCluster().clusterService().getSettings()));
+
         // assert no batches created
         assertEquals(0, gatewayAllocator.getNumberOfStartedShardBatches());
         assertEquals(0, gatewayAllocator.getNumberOfStoreShardBatches());
@@ -844,8 +845,6 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         assertFalse(health.isTimedOut());
         assertEquals(GREEN, health.getStatus());
 
-        // Now we will first stop cluster manager node and then stop data nodes. This will ensure to avoid any scenarios
-        // of more number of batch creation.
         String clusterManagerName = internalCluster().getClusterManagerName();
         Settings clusterManagerDataPathSettings = internalCluster().dataPathSettings(clusterManagerName);
         Settings node0DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(0));
@@ -861,7 +860,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
             Settings.builder()
                 .put("node.name", clusterManagerName)
                 .put(clusterManagerDataPathSettings)
-                .put(GatewayAllocator.GATEWAY_ALLOCATOR_BATCH_SIZE.getKey(), 5)
+                .put(ShardsBatchGatewayAllocator.GATEWAY_ALLOCATOR_BATCH_SIZE.getKey(), 5)
                 .put(ExistingShardsAllocator.EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.getKey(), true)
                 .build()
         );
@@ -871,8 +870,8 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ClusterRerouteResponse clusterRerouteResponse = client().admin().cluster().prepareReroute().setRetryFailed(true).get();
         assertTrue(clusterRerouteResponse.isAcknowledged());
 
-        GatewayAllocator gatewayAllocator = internalCluster().getInstance(
-            GatewayAllocator.class,
+        ShardsBatchGatewayAllocator gatewayAllocator = internalCluster().getInstance(
+            ShardsBatchGatewayAllocator.class,
             internalCluster().getClusterManagerName()
         );
         assertTrue(ExistingShardsAllocator.EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.get(internalCluster().clusterService().getSettings()));
@@ -970,8 +969,8 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ClusterRerouteResponse clusterRerouteResponse = client().admin().cluster().prepareReroute().setRetryFailed(true).get();
         assertTrue(clusterRerouteResponse.isAcknowledged());
 
-        GatewayAllocator gatewayAllocator = internalCluster().getInstance(
-            GatewayAllocator.class,
+        ShardsBatchGatewayAllocator gatewayAllocator = internalCluster().getInstance(
+            ShardsBatchGatewayAllocator.class,
             internalCluster().getClusterManagerName()
         );
         assertTrue(ExistingShardsAllocator.EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.get(internalCluster().clusterService().getSettings()));
@@ -1013,6 +1012,11 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
                 prefix + i,
                 Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1).build()
             );
+            // index doc2
+            client().prepareIndex(prefix + i).setId("1").setSource("foo", "bar").get();
+
+            // index doc 2
+            client().prepareIndex(prefix + i).setId("2").setSource("foo2", "bar2").get();
             ensureGreen(prefix + i);
         }
     }

@@ -58,6 +58,7 @@ import org.opensearch.cluster.routing.allocation.decider.Decision;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.gateway.GatewayAllocator;
 import org.opensearch.gateway.PriorityComparator;
+import org.opensearch.gateway.ShardsBatchGatewayAllocator;
 import org.opensearch.snapshots.SnapshotsInfoService;
 
 import java.util.ArrayList;
@@ -571,12 +572,22 @@ public class AllocationService {
             // if not fallback to single assignment
             ExistingShardsAllocator allocator = verifySameAllocatorForAllUnassignedShards(allocation);
             if (allocator != null) {
+                // use batch mode implementation of GatewayAllocator
+                if (allocator.getClass() == GatewayAllocator.class) {
+                    allocator = existingShardsAllocators.get(ShardsBatchGatewayAllocator.ALLOCATOR_NAME);
+                }
+
                 allocator.allocateUnassignedBatch(allocation, true);
                 for (final ExistingShardsAllocator existingShardsAllocator : existingShardsAllocators.values()) {
                     existingShardsAllocator.afterPrimariesBeforeReplicas(allocation);
                 }
                 allocator.allocateUnassignedBatch(allocation, false);
                 return;
+            } else {
+                // it means though batch mode is enabled but some indices have custom allocator set and we cant do Batch recover in that
+                // case
+                // fallback to single assignment and
+                logger.debug("Batch mode is enabled but some indices have custom allocator set. Falling back to single assignment");
             }
         }
 
@@ -729,7 +740,15 @@ public class AllocationService {
         final String allocatorName = ExistingShardsAllocator.EXISTING_SHARDS_ALLOCATOR_SETTING.get(
             routingAllocation.metadata().getIndexSafe(shardRouting.index()).getSettings()
         );
-        final ExistingShardsAllocator existingShardsAllocator = existingShardsAllocators.get(allocatorName);
+        ExistingShardsAllocator existingShardsAllocator = existingShardsAllocators.get(allocatorName);
+        ;
+        // // check if the batched mode disabled, then check if allocator name of index is instance of GatewayAllocator then
+        // // use non batched version of GatewayAllocator
+        // if (!EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.get(settings) && existingShardsAllocators.get(allocatorName) instanceof
+        // GatewayAllocator) {
+        // existingShardsAllocator = existingShardsAllocators.get(GatewayAllocator.ALLOCATOR_NAME);
+        // }
+
         return existingShardsAllocator != null ? existingShardsAllocator : new NotFoundAllocator(allocatorName);
     }
 
