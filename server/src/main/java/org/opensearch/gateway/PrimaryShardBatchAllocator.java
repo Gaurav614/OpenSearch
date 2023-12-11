@@ -12,9 +12,7 @@ import org.apache.logging.log4j.Logger;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.routing.RoutingNodes;
 import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.UnassignedInfo.AllocationStatus;
 import org.opensearch.cluster.routing.allocation.AllocateUnassignedDecision;
-import org.opensearch.cluster.routing.allocation.NodeAllocationResult;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.gateway.AsyncShardFetch.FetchResult;
 import org.opensearch.gateway.TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard;
@@ -63,13 +61,8 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
     }
 
     @Override
-    public AllocateUnassignedDecision makeAllocationDecision(
-        ShardRouting unassignedShard,
-        RoutingAllocation allocation,
-        Logger logger
-    ) {
-        return makeAllocationDecision(new HashSet<>(Collections.singletonList(unassignedShard)), allocation, logger)
-            .get(unassignedShard);
+    public AllocateUnassignedDecision makeAllocationDecision(ShardRouting unassignedShard, RoutingAllocation allocation, Logger logger) {
+        return makeAllocationDecision(new HashSet<>(Collections.singletonList(unassignedShard)), allocation, logger).get(unassignedShard);
     }
 
     /**
@@ -108,7 +101,10 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
 
         // process the received data
         for (ShardRouting unassignedShard : eligibleShards) {
-            List<TransportNodesListGatewayStartedShards.NodeGatewayStartedShards> nodeShardStates = adaptToNodeShardStates(unassignedShard, shardsState);
+            List<TransportNodesListGatewayStartedShards.NodeGatewayStartedShards> nodeShardStates = adaptToNodeShardStates(
+                unassignedShard,
+                shardsState
+            );
             // get allocation decision for this shard
             shardAllocationDecisions.put(unassignedShard, getAllocationDecision(unassignedShard, allocation, nodeShardStates, logger));
         }
