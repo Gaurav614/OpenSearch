@@ -310,8 +310,6 @@ public class TransportNodesListGatewayStartedBatchShards extends TransportNodesA
     /**
      * Class for storing the information about the shard fetched on the node.
      *
-     *  TODO: Add a comment for this why this
-     *
      * @opensearch.internal
      */
     public static class NodeGatewayStartedShard {
