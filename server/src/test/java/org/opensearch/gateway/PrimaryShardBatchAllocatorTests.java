@@ -288,9 +288,9 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             if (data == null) {
                 data = new HashMap<>();
             }
-            Map<ShardId, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards> shardData = Map.of(
+            Map<ShardId, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard> shardData = Map.of(
                 shardId,
-                new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards(
+                new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard(
                     allocationId,
                     primary,
                     replicationCheckpoint,
@@ -312,10 +312,10 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             if (data == null) {
                 data = new HashMap<>();
             }
-            Map<ShardId, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards> shardData = new HashMap<>();
+            Map<ShardId, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard> shardData = new HashMap<>();
             shardData.put(
                 shardId,
-                new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards(
+                new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard(
                     allocationId,
                     primary,
                     replicationCheckpoint,

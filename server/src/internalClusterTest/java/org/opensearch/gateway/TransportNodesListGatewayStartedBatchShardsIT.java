@@ -51,7 +51,7 @@ public class TransportNodesListGatewayStartedBatchShardsIT extends OpenSearchInt
         );
         final Index index = resolveIndex(indexName);
         final ShardId shardId = new ShardId(index, 0);
-        TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards nodeGatewayStartedShards = response.getNodesMap()
+        TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard nodeGatewayStartedShards = response.getNodesMap()
             .get(searchShardsResponse.getNodes()[0].getId())
             .getNodeGatewayStartedShardsBatch()
             .get(shardId);
@@ -79,7 +79,7 @@ public class TransportNodesListGatewayStartedBatchShardsIT extends OpenSearchInt
             ShardId shardId = clusterSearchShardsGroup.getShardId();
             assertEquals(1, clusterSearchShardsGroup.getShards().length);
             String nodeId = clusterSearchShardsGroup.getShards()[0].currentNodeId();
-            TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards nodeGatewayStartedShards = response.getNodesMap()
+            TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard nodeGatewayStartedShards = response.getNodesMap()
                 .get(nodeId)
                 .getNodeGatewayStartedShardsBatch()
                 .get(shardId);
@@ -101,7 +101,7 @@ public class TransportNodesListGatewayStartedBatchShardsIT extends OpenSearchInt
             new TransportNodesListGatewayStartedBatchShards.Request(getDiscoveryNodes(), shardAttributes)
         );
         DiscoveryNode[] discoveryNodes = getDiscoveryNodes();
-        TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards nodeGatewayStartedShards = response.getNodesMap()
+        TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard nodeGatewayStartedShards = response.getNodesMap()
             .get(discoveryNodes[0].getId())
             .getNodeGatewayStartedShardsBatch()
             .get(shardId);
@@ -122,7 +122,7 @@ public class TransportNodesListGatewayStartedBatchShardsIT extends OpenSearchInt
     }
 
     private void assertNodeGatewayStartedShardsHappyCase(
-        TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards nodeGatewayStartedShards
+        TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard nodeGatewayStartedShards
     ) {
         assertNull(nodeGatewayStartedShards.storeException());
         assertNotNull(nodeGatewayStartedShards.allocationId());
