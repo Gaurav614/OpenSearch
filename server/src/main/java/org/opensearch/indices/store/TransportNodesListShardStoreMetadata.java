@@ -72,6 +72,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
+import static org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper.getListShardMetadataOnLocalNode;
+
 /**
  * Metadata for shard stores from a list of transport nodes
  *
@@ -162,73 +164,18 @@ public class TransportNodesListShardStoreMetadata extends TransportNodesAction<
 
     private StoreFilesMetadata listStoreMetadata(NodeRequest request) throws IOException {
         final ShardId shardId = request.getShardId();
-        logger.trace("listing store meta data for {}", shardId);
-        long startTimeNS = System.nanoTime();
-        boolean exists = false;
         try {
-            IndexService indexService = indicesService.indexService(shardId.getIndex());
-            if (indexService != null) {
-                IndexShard indexShard = indexService.getShardOrNull(shardId.id());
-                if (indexShard != null) {
-                    try {
-                        final StoreFilesMetadata storeFilesMetadata = new StoreFilesMetadata(
-                            shardId,
-                            indexShard.snapshotStoreMetadata(),
-                            indexShard.getPeerRecoveryRetentionLeases()
-                        );
-                        exists = true;
-                        return storeFilesMetadata;
-                    } catch (org.apache.lucene.index.IndexNotFoundException e) {
-                        logger.trace(new ParameterizedMessage("[{}] node is missing index, responding with empty", shardId), e);
-                        return new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList());
-                    } catch (IOException e) {
-                        logger.warn(new ParameterizedMessage("[{}] can't read metadata from store, responding with empty", shardId), e);
-                        return new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList());
-                    }
-                }
-            }
-            final String customDataPath;
-            if (request.getCustomDataPath() != null) {
-                customDataPath = request.getCustomDataPath();
-            } else {
-                // TODO: Fallback for BWC with older predecessor (ES) versions.
-                // Remove this once request.getCustomDataPath() always returns non-null
-                if (indexService != null) {
-                    customDataPath = indexService.getIndexSettings().customDataPath();
-                } else {
-                    IndexMetadata metadata = clusterService.state().metadata().index(shardId.getIndex());
-                    if (metadata != null) {
-                        customDataPath = new IndexSettings(metadata, settings).customDataPath();
-                    } else {
-                        logger.trace("{} node doesn't have meta data for the requests index", shardId);
-                        throw new OpenSearchException("node doesn't have meta data for index " + shardId.getIndex());
-                    }
-                }
-            }
-            final ShardPath shardPath = ShardPath.loadShardPath(logger, nodeEnv, shardId, customDataPath);
-            if (shardPath == null) {
-                return new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList());
-            }
-            // note that this may fail if it can't get access to the shard lock. Since we check above there is an active shard, this means:
-            // 1) a shard is being constructed, which means the cluster-manager will not use a copy of this replica
-            // 2) A shard is shutting down and has not cleared it's content within lock timeout. In this case the cluster-manager may not
-            // reuse local resources.
-            final Store.MetadataSnapshot metadataSnapshot = Store.readMetadataSnapshot(
-                shardPath.resolveIndex(),
+            return getListShardMetadataOnLocalNode(
+                logger,
                 shardId,
-                nodeEnv::shardLock,
-                logger
+                nodeEnv,
+                indicesService,
+                request.getCustomDataPath(),
+                settings,
+                clusterService
             );
-            // We use peer recovery retention leases from the primary for allocating replicas. We should always have retention leases when
-            // we refresh shard info after the primary has started. Hence, we can ignore retention leases if there is no active shard.
-            return new StoreFilesMetadata(shardId, metadataSnapshot, Collections.emptyList());
-        } finally {
-            TimeValue took = new TimeValue(System.nanoTime() - startTimeNS, TimeUnit.NANOSECONDS);
-            if (exists) {
-                logger.debug("{} loaded store meta data (took [{}])", shardId, took);
-            } else {
-                logger.trace("{} didn't find any store meta data to load (took [{}])", shardId, took);
-            }
+        } catch (IOException e) {
+            return new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList());
         }
     }
 
