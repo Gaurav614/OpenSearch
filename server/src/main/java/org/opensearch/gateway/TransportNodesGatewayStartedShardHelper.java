@@ -33,7 +33,7 @@ import java.io.IOException;
  * This class should not be used to add more functions and will be removed when the
  * {@link TransportNodesListGatewayStartedShards} will be deprecated and all the code will be moved to
  * {@link TransportNodesListGatewayStartedBatchShards}
- * <p>
+ *
  * @opensearch.internal
  */
 public class TransportNodesGatewayStartedShardHelper {
