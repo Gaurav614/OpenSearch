@@ -124,6 +124,7 @@ import org.opensearch.env.NodeMetadata;
 import org.opensearch.extensions.ExtensionsManager;
 import org.opensearch.extensions.NoopExtensionsManager;
 import org.opensearch.gateway.GatewayAllocator;
+import org.opensearch.gateway.ShardsBatchGatewayAllocator;
 import org.opensearch.gateway.GatewayMetaState;
 import org.opensearch.gateway.GatewayModule;
 import org.opensearch.gateway.GatewayService;
@@ -1189,7 +1190,14 @@ public class Node implements Closeable {
             // completes we trigger another reroute to try the allocation again. This means there is a circular dependency: the allocation
             // service needs access to the existing shards allocators (e.g. the GatewayAllocator) which need to be able to trigger a
             // reroute, which needs to call into the allocation service. We close the loop here:
-            clusterModule.setExistingShardsAllocators(injector.getInstance(GatewayAllocator.class));
+            // create Hashmap for existing Allocators
+            Map<String, GatewayAllocator> gatewayAllocatorMap = new HashMap<>() {
+                {
+                    put(GatewayAllocator.ALLOCATOR_NAME, injector.getInstance(GatewayAllocator.class));
+                    put(ShardsBatchGatewayAllocator.ALLOCATOR_NAME, injector.getInstance(ShardsBatchGatewayAllocator.class));
+                }
+            };
+            clusterModule.setExistingShardsAllocators(gatewayAllocatorMap);
 
             List<LifecycleComponent> pluginLifecycleComponents = pluginComponents.stream()
                 .filter(p -> p instanceof LifecycleComponent)
