@@ -45,15 +45,15 @@ public class TestShardBatchGatewayAllocator extends ShardsBatchGatewayAllocator 
             for (Map.Entry<String, Map<ShardId, ShardRouting>> entry : knownAllocations.entrySet()) {
                 String nodeId = entry.getKey();
                 Map<ShardId, ShardRouting> shardsOnNode = entry.getValue();
-                HashMap<ShardId, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards> adaptedResponse = new HashMap<>();
+                HashMap<ShardId, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard> adaptedResponse = new HashMap<>();
 
                 for (ShardRouting shardRouting : shardsEligibleForFetch) {
                     ShardId shardId = shardRouting.shardId();
                     Set<String> ignoreNodes = allocation.getIgnoreNodes(shardId);
 
                     if (shardsOnNode.containsKey(shardId) && ignoreNodes.contains(nodeId) == false && currentNodes.nodeExists(nodeId)) {
-                        TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards nodeShard =
-                            new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShards(
+                        TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard nodeShard =
+                            new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard(
                                 shardRouting.allocationId().getId(),
                                 shardRouting.primary(),
                                 getReplicationCheckpoint(shardId, nodeId)
