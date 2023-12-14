@@ -93,6 +93,10 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         RoutingAllocation allocation,
         Map<DiscoveryNode, StoreFilesMetadata> nodeShardStores
     ) {
+        if (nodeShardStores == null) {
+            logger.trace("{}: fetching new stores for initializing shard", shard);
+            return null;
+        }
         Metadata metadata = allocation.metadata();
         RoutingNodes routingNodes = allocation.routingNodes();
         ShardRouting primaryShard = allocation.routingNodes().activePrimary(shard.shardId());
@@ -168,11 +172,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
                 }
 
                 AsyncShardFetch.FetchResult<NodeStoreFilesMetadata> shardStores = fetchData(shard, allocation);
-                if (shardStores.hasData() == false) {
-                    logger.trace("{}: fetching new stores for initializing shard", shard);
-                    continue; // still fetching
-                }
-                Map<DiscoveryNode, StoreFilesMetadata> nodeShardStores = adaptToNodeShardStores(shardStores);
+                Map<DiscoveryNode, StoreFilesMetadata> nodeShardStores = convertToNodeStoreFilesMetadataMap(shardStores);
 
                 Runnable cancellationAction = getShardCancellationAction(shard, allocation, nodeShardStores);
                 if (cancellationAction != null) {
@@ -221,16 +221,7 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         }
 
         AsyncShardFetch.FetchResult<NodeStoreFilesMetadata> shardStores = fetchData(unassignedShard, allocation);
-        if (shardStores.hasData() == false) {
-            logger.trace("{}: ignoring allocation, still fetching shard stores", unassignedShard);
-            allocation.setHasPendingAsyncFetch();
-            List<NodeAllocationResult> nodeDecisions = null;
-            if (allocation.debugDecision()) {
-                nodeDecisions = buildDecisionsForAllNodes(unassignedShard, allocation);
-            }
-            return AllocateUnassignedDecision.no(AllocationStatus.FETCHING_SHARD_DATA, nodeDecisions);
-        }
-        Map<DiscoveryNode, StoreFilesMetadata> nodeShardStores = adaptToNodeShardStores(shardStores);
+        Map<DiscoveryNode, StoreFilesMetadata> nodeShardStores = convertToNodeStoreFilesMetadataMap(shardStores);
         return getAllocationDecision(unassignedShard, allocation, nodeShardStores, result, logger);
     }
 
@@ -241,6 +232,16 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         Tuple<Decision, Map<String, NodeAllocationResult>> allocationDecision,
         Logger logger
     ) {
+        if (nodeShardStores == null) {
+            // node shard stores is null when we don't have data yet and still fetching the shard stores
+            logger.trace("{}: ignoring allocation, still fetching shard stores", unassignedShard);
+            allocation.setHasPendingAsyncFetch();
+            List<NodeAllocationResult> nodeDecisions = null;
+            if (allocation.debugDecision()) {
+                nodeDecisions = buildDecisionsForAllNodes(unassignedShard, allocation);
+            }
+            return AllocateUnassignedDecision.no(AllocationStatus.FETCHING_SHARD_DATA, nodeDecisions);
+        }
         final RoutingNodes routingNodes = allocation.routingNodes();
         final boolean explain = allocation.debugDecision();
         ShardRouting primaryShard = routingNodes.activePrimary(unassignedShard.shardId());
@@ -471,8 +472,11 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         return new MatchingNodes(matchingNodes, nodeDecisions);
     }
 
-    private Map<DiscoveryNode, StoreFilesMetadata> adaptToNodeShardStores(AsyncShardFetch.FetchResult<NodeStoreFilesMetadata> data) {
-        assert data.hasData();
+    private Map<DiscoveryNode, StoreFilesMetadata> convertToNodeStoreFilesMetadataMap(AsyncShardFetch.FetchResult<NodeStoreFilesMetadata> data) {
+        if (data.hasData() == false) {
+            // if we don't have data yet return null
+            return null;
+        }
         return data.getData()
             .entrySet()
             .stream()
