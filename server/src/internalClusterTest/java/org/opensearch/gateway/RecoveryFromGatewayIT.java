@@ -32,6 +32,7 @@
 
 package org.opensearch.gateway;
 
+import org.apache.lucene.index.CorruptIndexException;
 import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsAction;
 import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsRequest;
 import org.opensearch.action.admin.cluster.configuration.ClearVotingConfigExclusionsAction;
@@ -61,6 +62,7 @@ import org.opensearch.index.IndexSettings;
 import org.opensearch.index.MergePolicyConfig;
 import org.opensearch.index.engine.Engine;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.ShardPath;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.recovery.RecoveryState;
@@ -922,27 +924,17 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         assertEquals(8, health.getActiveShards());
 
         String culpritShardIndexName = "test0";
-        final String customDataPath = IndexMetadata.INDEX_DATA_PATH_SETTING.get(
-            client().admin().indices().prepareGetSettings(culpritShardIndexName).get().getIndexToSettings().get(culpritShardIndexName)
-        );
-        final Index index = resolveIndex(culpritShardIndexName);
-        final ShardId shardId = new ShardId(index, 0);
-
-        for (String dataNode : dataOnlyNodes) {
-            for (Path path : internalCluster().getInstance(NodeEnvironment.class, dataNode).availableShardPaths(shardId)) {
-                final Path indexPath = path.resolve(ShardPath.INDEX_FOLDER_NAME);
-                if (Files.exists(indexPath)) {
-                    try (DirectoryStream<Path> stream = Files.newDirectoryStream(indexPath)) {
-                        for (Path item : stream) {
-                            if (item.getFileName().toString().startsWith("segments_")) {
-                                logger.debug("--> deleting [{}]", item);
-                                Files.delete(item);
-                            }
-                        }
-                    }
-                }
-            }
+        Index idx = resolveIndex(culpritShardIndexName);
+        for (String node : internalCluster().nodesInclude(culpritShardIndexName)) {
+            IndicesService indexServices = internalCluster().getInstance(IndicesService.class, node);
+            IndexService indexShards = indexServices.indexServiceSafe(idx);
+            Integer shardId = 0;
+            IndexShard shard = indexShards.getShard(0);
+            logger.debug("--> failing shard [{}] on node [{}]", shardId, node);
+            shard.failShard("test", new CorruptIndexException("test corrupted", ""));
+            logger.debug("--> failed shard [{}] on node [{}]", shardId, node);
         }
+
         String clusterManagerName = internalCluster().getClusterManagerName();
         Settings clusterManagerDataPathSettings = internalCluster().dataPathSettings(clusterManagerName);
         Settings node0DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(0));
