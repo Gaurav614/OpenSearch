@@ -80,7 +80,7 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
                 continue; // still fetching
             }
             for (ShardRouting shard : eligibleFetchShards) {
-                Map<DiscoveryNode, StoreFilesMetadata> nodeShardStores = getNodeShardStores(shard, shardState);
+                Map<DiscoveryNode, StoreFilesMetadata> nodeShardStores = convertToNodeStoreFilesMetadataMap(shard, shardState);
 
                 Runnable cancellationAction = getShardCancellationAction(shard, allocation, nodeShardStores);
                 if (cancellationAction != null) {
@@ -166,33 +166,23 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
         );
 
         for (ShardRouting unassignedShard : shardsEligibleForFetch) {
-            if (!shardsState.hasData()) {
-                logger.trace("{}: ignoring allocation, still fetching shard stores", unassignedShard);
-                allocation.setHasPendingAsyncFetch();
-                List<NodeAllocationResult> nodeDecisions = null;
-                if (explain) {
-                    nodeDecisions = buildDecisionsForAllNodes(unassignedShard, allocation);
-                }
-                shardAllocationDecisions.put(
-                    unassignedShard,
-                    AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.FETCHING_SHARD_DATA, nodeDecisions)
-                );
-                continue;
-            }
             Tuple<Decision, Map<String, NodeAllocationResult>> result = nodeAllocationDecisions.get(unassignedShard);
             shardAllocationDecisions.put(
                 unassignedShard,
-                getAllocationDecision(unassignedShard, allocation, getNodeShardStores(unassignedShard, shardsState), result, logger)
+                getAllocationDecision(unassignedShard, allocation, convertToNodeStoreFilesMetadataMap(unassignedShard, shardsState), result, logger)
             );
         }
         return shardAllocationDecisions;
     }
 
-    private Map<DiscoveryNode, StoreFilesMetadata> getNodeShardStores(
+    private Map<DiscoveryNode, StoreFilesMetadata> convertToNodeStoreFilesMetadataMap(
         ShardRouting unassignedShard,
         FetchResult<NodeStoreFilesMetadataBatch> data
     ) {
-        assert data.hasData();
+        if (!data.hasData()) {
+            // if we don't have any data, return null
+            return null;
+        }
         return new HashMap<>(
             data.getData()
                 .entrySet()
