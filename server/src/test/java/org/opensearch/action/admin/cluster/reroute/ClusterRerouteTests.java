@@ -55,6 +55,7 @@ import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.snapshots.EmptySnapshotsInfoService;
+import org.opensearch.test.gateway.TestGatewayAllocator;
 import org.opensearch.test.gateway.TestShardBatchGatewayAllocator;
 
 import java.io.IOException;
@@ -94,7 +95,7 @@ public class ClusterRerouteTests extends OpenSearchAllocationTestCase {
     public void testClusterStateUpdateTask() {
         AllocationService allocationService = new AllocationService(
             new AllocationDeciders(Collections.singleton(new MaxRetryAllocationDecider())),
-            new TestShardBatchGatewayAllocator(),
+            new TestGatewayAllocator(),
             new BalancedShardsAllocator(Settings.EMPTY),
             EmptyClusterInfoService.INSTANCE,
             EmptySnapshotsInfoService.INSTANCE

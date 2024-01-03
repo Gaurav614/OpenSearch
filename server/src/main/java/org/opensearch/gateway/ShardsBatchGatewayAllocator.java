@@ -44,6 +44,7 @@ import org.opensearch.cluster.routing.RerouteService;
 import org.opensearch.cluster.routing.RoutingNodes;
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.routing.allocation.AllocateUnassignedDecision;
+import org.opensearch.cluster.routing.allocation.ExistingShardsAllocator;
 import org.opensearch.cluster.routing.allocation.FailedShard;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.common.Priority;
@@ -78,7 +79,7 @@ import java.util.stream.StreamSupport;
  *
  * @opensearch.internal
  */
-public class ShardsBatchGatewayAllocator extends GatewayAllocator {
+public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
 
     public static final String ALLOCATOR_NAME = "shards_batch_gateway_allocator";
 
@@ -117,13 +118,13 @@ public class ShardsBatchGatewayAllocator extends GatewayAllocator {
     @Inject
     public ShardsBatchGatewayAllocator(
         RerouteService rerouteService,
-        TransportNodesListGatewayStartedShards startedAction,
-        TransportNodesListShardStoreMetadata storeAction,
+//        TransportNodesListGatewayStartedShards startedAction,
+//        TransportNodesListShardStoreMetadata storeAction,
         TransportNodesListGatewayStartedBatchShards batchStartedAction,
         TransportNodesListShardStoreMetadataBatch batchStoreAction,
         Settings settings
     ) {
-        super(rerouteService, startedAction, storeAction);
+//        super(rerouteService, startedAction, storeAction);
         this.rerouteService = rerouteService;
         this.primaryBatchShardAllocator = new InternalPrimaryBatchShardAllocator();
         this.replicaBatchShardAllocator = new InternalReplicaBatchShardAllocator();
@@ -204,6 +205,11 @@ public class ShardsBatchGatewayAllocator extends GatewayAllocator {
             // cancel existing recoveries if we have a better match
             replicaBatchShardAllocator.processExistingRecoveries(allocation, storedShardBatches);
         }
+    }
+
+    @Override
+    public void allocateUnassigned(ShardRouting shardRouting, RoutingAllocation allocation, UnassignedAllocationHandler unassignedAllocationHandler) {
+        throw new UnsupportedOperationException("ShardsBatchGatewayAllocator does not support allocating unassigned shards");
     }
 
     @Override

@@ -1165,15 +1165,15 @@ public class Node implements Closeable {
             // service needs access to the existing shards allocators (e.g. the GatewayAllocator) which need to be able to trigger a
             // reroute, which needs to call into the allocation service. We close the loop here:
             // create Hashmap for existing Allocators
-            Map<String, GatewayAllocator> gatewayAllocatorMap = new HashMap<>() {
-                {
-                    put(GatewayAllocator.ALLOCATOR_NAME, injector.getInstance(GatewayAllocator.class));
-                    put(ShardsBatchGatewayAllocator.ALLOCATOR_NAME, injector.getInstance(ShardsBatchGatewayAllocator.class));
-                }
-            };
+//            Map<String, GatewayAllocator> gatewayAllocatorMap = new HashMap<>() {
+//                {
+//                    put(GatewayAllocator.ALLOCATOR_NAME, injector.getInstance(GatewayAllocator.class));
+//                    put(ShardsBatchGatewayAllocator.ALLOCATOR_NAME, injector.getInstance(ShardsBatchGatewayAllocator.class));
+//                }
+//            };
             // List<GatewayAllocator> classes = List.of(injector.getInstance(GatewayAllocator.class),
             // injector.getInstance(ShardsBatchGatewayAllocator.class));
-            clusterModule.setExistingShardsAllocators(gatewayAllocatorMap);
+            clusterModule.setExistingShardsAllocators( injector.getInstance(GatewayAllocator.class),  injector.getInstance(ShardsBatchGatewayAllocator.class));
             // clusterModule.setExistingShardsAllocators(injector.getInstance(ShardsBatchGatewayAllocator.class));
 
             List<LifecycleComponent> pluginLifecycleComponents = pluginComponents.stream()

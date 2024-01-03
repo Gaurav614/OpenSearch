@@ -54,4 +54,12 @@ public class ShardAttributes implements Writeable {
         shardId.writeTo(out);
         out.writeString(customDataPath);
     }
+
+    @Override
+    public String toString() {
+        return "ShardAttributes{" +
+            "shardId=" + shardId +
+            ", customDataPath='" + customDataPath + '\'' +
+            '}';
+    }
 }
