@@ -56,7 +56,6 @@ import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.snapshots.EmptySnapshotsInfoService;
 import org.opensearch.test.gateway.TestGatewayAllocator;
-import org.opensearch.test.gateway.TestShardBatchGatewayAllocator;
 
 import java.io.IOException;
 import java.util.Collections;

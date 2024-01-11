@@ -6,30 +6,6 @@
  * compatible open source license.
  */
 
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
 package org.opensearch.gateway;
 
 import org.apache.logging.log4j.LogManager;
@@ -58,7 +34,6 @@ import org.opensearch.common.util.set.Sets;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.indices.store.ShardAttributes;
-import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
 
 import java.util.Collections;
@@ -118,13 +93,10 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
     @Inject
     public ShardsBatchGatewayAllocator(
         RerouteService rerouteService,
-//        TransportNodesListGatewayStartedShards startedAction,
-//        TransportNodesListShardStoreMetadata storeAction,
         TransportNodesListGatewayStartedBatchShards batchStartedAction,
         TransportNodesListShardStoreMetadataBatch batchStoreAction,
         Settings settings
     ) {
-//        super(rerouteService, startedAction, storeAction);
         this.rerouteService = rerouteService;
         this.primaryBatchShardAllocator = new InternalPrimaryBatchShardAllocator();
         this.replicaBatchShardAllocator = new InternalReplicaBatchShardAllocator();
@@ -208,7 +180,11 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
     }
 
     @Override
-    public void allocateUnassigned(ShardRouting shardRouting, RoutingAllocation allocation, UnassignedAllocationHandler unassignedAllocationHandler) {
+    public void allocateUnassigned(
+        ShardRouting shardRouting,
+        RoutingAllocation allocation,
+        UnassignedAllocationHandler unassignedAllocationHandler
+    ) {
         throw new UnsupportedOperationException("ShardsBatchGatewayAllocator does not support allocating unassigned shards");
     }
 

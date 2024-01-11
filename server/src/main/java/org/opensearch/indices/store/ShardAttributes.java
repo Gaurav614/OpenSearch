@@ -57,9 +57,6 @@ public class ShardAttributes implements Writeable {
 
     @Override
     public String toString() {
-        return "ShardAttributes{" +
-            "shardId=" + shardId +
-            ", customDataPath='" + customDataPath + '\'' +
-            '}';
+        return "ShardAttributes{" + "shardId=" + shardId + ", customDataPath='" + customDataPath + '\'' + '}';
     }
 }

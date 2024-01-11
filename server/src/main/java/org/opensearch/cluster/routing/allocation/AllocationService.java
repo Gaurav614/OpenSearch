@@ -599,6 +599,7 @@ public class AllocationService {
             }
         }
     }
+
     private void disassociateDeadNodes(RoutingAllocation allocation) {
         for (Iterator<RoutingNode> it = allocation.routingNodes().mutableIterator(); it.hasNext();) {
             RoutingNode node = it.next();
@@ -701,14 +702,6 @@ public class AllocationService {
             routingAllocation.metadata().getIndexSafe(shardRouting.index()).getSettings()
         );
         ExistingShardsAllocator existingShardsAllocator = existingShardsAllocators.get(allocatorName);
-        ;
-        // // check if the batched mode disabled, then check if allocator name of index is instance of GatewayAllocator then
-        // // use non batched version of GatewayAllocator
-        // if (!EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.get(settings) && existingShardsAllocators.get(allocatorName) instanceof
-        // GatewayAllocator) {
-        // existingShardsAllocator = existingShardsAllocators.get(GatewayAllocator.ALLOCATOR_NAME);
-        // }
-
         return existingShardsAllocator != null ? existingShardsAllocator : new NotFoundAllocator(allocatorName);
     }
 

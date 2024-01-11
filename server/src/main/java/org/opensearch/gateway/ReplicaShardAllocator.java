@@ -472,7 +472,9 @@ public abstract class ReplicaShardAllocator extends BaseGatewayShardAllocator {
         return new MatchingNodes(matchingNodes, nodeDecisions);
     }
 
-    private Map<DiscoveryNode, StoreFilesMetadata> convertToNodeStoreFilesMetadataMap(AsyncShardFetch.FetchResult<NodeStoreFilesMetadata> data) {
+    private Map<DiscoveryNode, StoreFilesMetadata> convertToNodeStoreFilesMetadataMap(
+        AsyncShardFetch.FetchResult<NodeStoreFilesMetadata> data
+    ) {
         if (data.hasData() == false) {
             // if we don't have data yet return null
             return null;

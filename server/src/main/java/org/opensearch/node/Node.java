@@ -1162,20 +1162,14 @@ public class Node implements Closeable {
             // We allocate copies of existing shards by looking for a viable copy of the shard in the cluster and assigning the shard there.
             // The search for viable copies is triggered by an allocation attempt (i.e. a reroute) and is performed asynchronously. When it
             // completes we trigger another reroute to try the allocation again. This means there is a circular dependency: the allocation
-            // service needs access to the existing shards allocators (e.g. the GatewayAllocator) which need to be able to trigger a
+            // service needs access to the existing shards allocators (e.g. the GatewayAllocator, ShardsBatchGatewayAllocator) which need to
+            // be able to trigger a
             // reroute, which needs to call into the allocation service. We close the loop here:
-            // create Hashmap for existing Allocators
-//            Map<String, GatewayAllocator> gatewayAllocatorMap = new HashMap<>() {
-//                {
-//                    put(GatewayAllocator.ALLOCATOR_NAME, injector.getInstance(GatewayAllocator.class));
-//                    put(ShardsBatchGatewayAllocator.ALLOCATOR_NAME, injector.getInstance(ShardsBatchGatewayAllocator.class));
-//                }
-//            };
-            // List<GatewayAllocator> classes = List.of(injector.getInstance(GatewayAllocator.class),
-            // injector.getInstance(ShardsBatchGatewayAllocator.class));
-            clusterModule.setExistingShardsAllocators( injector.getInstance(GatewayAllocator.class),  injector.getInstance(ShardsBatchGatewayAllocator.class));
-            // clusterModule.setExistingShardsAllocators(injector.getInstance(ShardsBatchGatewayAllocator.class));
-
+            // Setting two default Allocators for existingShardsAllocators
+            clusterModule.setExistingShardsAllocators(
+                injector.getInstance(GatewayAllocator.class),
+                injector.getInstance(ShardsBatchGatewayAllocator.class)
+            );
             List<LifecycleComponent> pluginLifecycleComponents = pluginComponents.stream()
                 .filter(p -> p instanceof LifecycleComponent)
                 .map(p -> (LifecycleComponent) p)

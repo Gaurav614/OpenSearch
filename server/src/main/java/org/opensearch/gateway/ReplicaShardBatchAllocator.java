@@ -169,7 +169,13 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
             Tuple<Decision, Map<String, NodeAllocationResult>> result = nodeAllocationDecisions.get(unassignedShard);
             shardAllocationDecisions.put(
                 unassignedShard,
-                getAllocationDecision(unassignedShard, allocation, convertToNodeStoreFilesMetadataMap(unassignedShard, shardsState), result, logger)
+                getAllocationDecision(
+                    unassignedShard,
+                    allocation,
+                    convertToNodeStoreFilesMetadataMap(unassignedShard, shardsState),
+                    result,
+                    logger
+                )
             );
         }
         return shardAllocationDecisions;

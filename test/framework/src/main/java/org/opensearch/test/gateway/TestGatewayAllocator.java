@@ -105,7 +105,7 @@ public class TestGatewayAllocator extends GatewayAllocator {
             });
         }
     };
-    
+
     private ReplicationCheckpoint getReplicationCheckpoint(ShardId shardId, String nodeName) {
         return shardIdNodeToReplicationCheckPointMap.getOrDefault(getReplicationCheckPointKey(shardId, nodeName), null);
     }
