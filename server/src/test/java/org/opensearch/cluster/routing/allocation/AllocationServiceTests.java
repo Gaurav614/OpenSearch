@@ -55,9 +55,11 @@ import org.opensearch.cluster.routing.allocation.decider.ThrottlingAllocationDec
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.gateway.GatewayAllocator;
+import org.opensearch.gateway.ShardsBatchGatewayAllocator;
 import org.opensearch.snapshots.EmptySnapshotsInfoService;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.test.gateway.TestGatewayAllocator;
+import org.opensearch.test.gateway.TestShardBatchGatewayAllocator;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -165,6 +167,7 @@ public class AllocationServiceTests extends OpenSearchTestCase {
         final Map<String, ExistingShardsAllocator> allocatorMap = new HashMap<>();
         final TestGatewayAllocator testGatewayAllocator = new TestGatewayAllocator();
         allocatorMap.put(GatewayAllocator.ALLOCATOR_NAME, testGatewayAllocator);
+        allocatorMap.put(ShardsBatchGatewayAllocator.ALLOCATOR_NAME, new TestShardBatchGatewayAllocator());
         allocatorMap.put(unrealisticAllocatorName, new UnrealisticAllocator());
         allocationService.setExistingShardsAllocators(allocatorMap);
 
