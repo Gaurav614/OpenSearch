@@ -79,7 +79,7 @@ public interface ExistingShardsAllocator {
      * https://github.com/opensearch-project/OpenSearch/issues/5098
      */
     Setting<Boolean> EXISTING_SHARDS_ALLOCATOR_BATCH_MODE = Setting.boolSetting(
-        "cluster.allocator.existing_shards_allocator.batch_enable",
+        "cluster.allocator.existing_shards_allocator.batch_enabled",
         true,
         Setting.Property.NodeScope
     );
