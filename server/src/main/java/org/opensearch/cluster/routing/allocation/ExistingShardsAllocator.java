@@ -74,7 +74,8 @@ public interface ExistingShardsAllocator {
      * Allocation Service will fallback to default implementation i.e. {@link ExistingShardsAllocator#allocateUnassigned(ShardRouting, RoutingAllocation, UnassignedAllocationHandler)}
      *
      * If no plugin overrides {@link ExistingShardsAllocator} then default implementation will be use for it , i.e,
-     * {@link GatewayAllocator}
+     * {@link ShardsBatchGatewayAllocator}. Right now even if plugin implements it, AllocationService will run the
+     * default implementation to enable Batch mode of assignment
      *
      * TODO: Currently its implementation is WIP for GatewayAllocator so setting enabling wont have any effect
      * https://github.com/opensearch-project/OpenSearch/issues/5098
@@ -109,6 +110,8 @@ public interface ExistingShardsAllocator {
      * Allocate all unassigned shards in the given {@link RoutingAllocation} for which this {@link ExistingShardsAllocator} is responsible.
      * Default implementation calls {@link #allocateUnassigned(ShardRouting, RoutingAllocation, UnassignedAllocationHandler)} for each Unassigned shard
      * and is kept here for backward compatibility.
+     *
+     * Allocation service will currently run the default implementation of it implemented by {@link ShardsBatchGatewayAllocator}
      */
     default void allocateAllUnassignedShards(RoutingAllocation allocation, boolean primary) {
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = allocation.routingNodes().unassigned().iterator();

@@ -570,7 +570,10 @@ public class AllocationService {
          */
         Boolean batchModeEnabled = EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.get(settings);
         if (batchModeEnabled && allocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT) && existingShardsAllocators.size() == 2) {
-            // if we do not have any custom allocator set then we will be using ShardsBatchGatewayAllocator
+            /*
+             If we do not have any custom allocator set then we will be using ShardsBatchGatewayAllocator
+             Currently AllocationService will not run any custom Allocator that implements allocateAllUnassignedShards
+             */
             ExistingShardsAllocator allocator = existingShardsAllocators.get(ShardsBatchGatewayAllocator.ALLOCATOR_NAME);
             allocator.allocateAllUnassignedShards(allocation, true);
             allocator.afterPrimariesBeforeReplicas(allocation);
