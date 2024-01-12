@@ -189,7 +189,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
     }
 
     @Override
-    public void allocateUnassignedBatch(final RoutingAllocation allocation, boolean primary) {
+    public void allocateAllUnassignedShards(final RoutingAllocation allocation, boolean primary) {
 
         assert primaryBatchShardAllocator != null;
         assert replicaBatchShardAllocator != null;

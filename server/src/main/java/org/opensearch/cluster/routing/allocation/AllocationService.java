@@ -572,9 +572,9 @@ public class AllocationService {
         if (batchModeEnabled && allocation.nodes().getMinNodeVersion().onOrAfter(Version.CURRENT) && existingShardsAllocators.size() == 2) {
             // if we do not have any custom allocator set then we will be using ShardsBatchGatewayAllocator
             ExistingShardsAllocator allocator = existingShardsAllocators.get(ShardsBatchGatewayAllocator.ALLOCATOR_NAME);
-            allocator.allocateUnassignedBatch(allocation, true);
+            allocator.allocateAllUnassignedShards(allocation, true);
             allocator.afterPrimariesBeforeReplicas(allocation);
-            allocator.allocateUnassignedBatch(allocation, false);
+            allocator.allocateAllUnassignedShards(allocation, false);
             return;
         }
         logger.warn("Falling back to single shard assignment since batch mode disable or multiple custom allocators set");

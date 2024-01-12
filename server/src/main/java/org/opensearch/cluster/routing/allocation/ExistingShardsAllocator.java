@@ -67,7 +67,7 @@ public interface ExistingShardsAllocator {
      * in one or more go.
      *
      * Enable this setting if your ExistingShardAllocator is implementing the
-     * {@link ExistingShardsAllocator#allocateUnassignedBatch(RoutingAllocation, boolean)} method.
+     * {@link ExistingShardsAllocator#allocateAllUnassignedShards(RoutingAllocation, boolean)} method.
      * The default implementation of this method is not optimized and assigns shards one by one.
      *
      * If enable to true then it expects all indices of the shard to use same {@link ExistingShardsAllocator}, otherwise
@@ -110,7 +110,7 @@ public interface ExistingShardsAllocator {
      * Default implementation calls {@link #allocateUnassigned(ShardRouting, RoutingAllocation, UnassignedAllocationHandler)} for each Unassigned shard
      * and is kept here for backward compatibility.
      */
-    default void allocateUnassignedBatch(RoutingAllocation allocation, boolean primary) {
+    default void allocateAllUnassignedShards(RoutingAllocation allocation, boolean primary) {
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = allocation.routingNodes().unassigned().iterator();
         while (iterator.hasNext()) {
             ShardRouting shardRouting = iterator.next();
