@@ -750,7 +750,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ensureGreen("test");
     }
 
-    public void testSingleShardFetch() {
+    public void testSingleShardFetchUsingBatchAction() {
         String indexName = "test";
         int numOfShards = 1;
         prepareIndex(indexName, numOfShards);
@@ -772,7 +772,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         assertNodeGatewayStartedShardsHappyCase(nodeGatewayStartedShards);
     }
 
-    public void testShardFetchMultiNodeMultiIndexes() {
+    public void testShardFetchMultiNodeMultiIndexesUsingBatchAction() {
         // start second node
         internalCluster().startNode();
         String indexName1 = "test1";
@@ -801,7 +801,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         }
     }
 
-    public void testShardFetchCorruptedShards() throws Exception {
+    public void testShardFetchCorruptedShardsUsingBatchAction() throws Exception {
         String indexName = "test";
         int numOfShards = 1;
         prepareIndex(indexName, numOfShards);
