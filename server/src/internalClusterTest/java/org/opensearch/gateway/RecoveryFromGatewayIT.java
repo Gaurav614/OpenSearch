@@ -757,7 +757,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ensureGreen("test");
     }
 
-    public void testSingleShardStoreFetch() throws ExecutionException, InterruptedException {
+    public void testSingleShardStoreFetchUsingBatchAction() throws ExecutionException, InterruptedException {
         String indexName = "test";
         DiscoveryNode[] nodes = getDiscoveryNodes();
         TransportNodesListShardStoreMetadataBatch.NodesStoreFilesMetadataBatch response = prepareAndSendRequest(
@@ -773,8 +773,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         assertNodeStoreFilesMetadataSuccessCase(nodeStoreFilesMetadata, shardId);
     }
 
-    public void testShardStoreFetchMultiNodeMultiIndexes() throws Exception {
-        // start second node
+    public void testShardStoreFetchMultiNodeMultiIndexesUsingBatchAction() throws Exception {
         internalCluster().startNode();
         String indexName1 = "test1";
         String indexName2 = "test2";
@@ -798,7 +797,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         }
     }
 
-    public void testShardStoreFetchNodeNotConnected() {
+    public void testShardStoreFetchNodeNotConnectedUsingBatchAction() {
         DiscoveryNode nonExistingNode = new DiscoveryNode("foo", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT);
         String indexName = "test";
         TransportNodesListShardStoreMetadataBatch.NodesStoreFilesMetadataBatch response = prepareAndSendRequest(
@@ -810,8 +809,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         assertEquals(nonExistingNode.getId(), response.failures().get(0).nodeId());
     }
 
-    public void testShardStoreFetchCorruptedIndex() throws Exception {
-        // start second node
+    public void testShardStoreFetchCorruptedIndexUsingBatchAction() throws Exception {
         internalCluster().startNode();
         String indexName = "test";
         prepareIndices(new String[] { indexName }, 1, 1);
