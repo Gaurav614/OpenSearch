@@ -757,6 +757,82 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ensureGreen("test");
     }
 
+    public void testSingleShardFetchUsingBatchAction() {
+        String indexName = "test";
+        int numOfShards = 1;
+        prepareIndex(indexName, numOfShards);
+        Map<ShardId, ShardAttributes> shardIdShardAttributesMap = prepareRequestMap(new String[] { indexName }, numOfShards);
+
+        ClusterSearchShardsResponse searchShardsResponse = client().admin().cluster().prepareSearchShards(indexName).get();
+
+        TransportNodesListGatewayStartedShardsBatch.NodesGatewayStartedShardsBatch response;
+        response = ActionTestUtils.executeBlocking(
+            internalCluster().getInstance(TransportNodesListGatewayStartedShardsBatch.class),
+            new TransportNodesListGatewayStartedShardsBatch.Request(searchShardsResponse.getNodes(), shardIdShardAttributesMap)
+        );
+        final Index index = resolveIndex(indexName);
+        final ShardId shardId = new ShardId(index, 0);
+        TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard nodeGatewayStartedShards = response.getNodesMap()
+            .get(searchShardsResponse.getNodes()[0].getId())
+            .getNodeGatewayStartedShardsBatch()
+            .get(shardId);
+        assertNodeGatewayStartedShardsHappyCase(nodeGatewayStartedShards);
+    }
+
+    public void testShardFetchMultiNodeMultiIndexesUsingBatchAction() {
+        // start node
+        internalCluster().startNode();
+        String indexName1 = "test1";
+        String indexName2 = "test2";
+        int numShards = internalCluster().numDataNodes();
+        // assign one primary shard each to the data nodes
+        prepareIndex(indexName1, numShards);
+        prepareIndex(indexName2, numShards);
+        Map<ShardId, ShardAttributes> shardIdShardAttributesMap = prepareRequestMap(new String[] { indexName1, indexName2 }, numShards);
+        ClusterSearchShardsResponse searchShardsResponse = client().admin().cluster().prepareSearchShards(indexName1, indexName2).get();
+        assertEquals(internalCluster().numDataNodes(), searchShardsResponse.getNodes().length);
+        TransportNodesListGatewayStartedShardsBatch.NodesGatewayStartedShardsBatch response;
+        response = ActionTestUtils.executeBlocking(
+            internalCluster().getInstance(TransportNodesListGatewayStartedShardsBatch.class),
+            new TransportNodesListGatewayStartedShardsBatch.Request(searchShardsResponse.getNodes(), shardIdShardAttributesMap)
+        );
+        for (ClusterSearchShardsGroup clusterSearchShardsGroup : searchShardsResponse.getGroups()) {
+            ShardId shardId = clusterSearchShardsGroup.getShardId();
+            assertEquals(1, clusterSearchShardsGroup.getShards().length);
+            String nodeId = clusterSearchShardsGroup.getShards()[0].currentNodeId();
+            TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard nodeGatewayStartedShards = response.getNodesMap()
+                .get(nodeId)
+                .getNodeGatewayStartedShardsBatch()
+                .get(shardId);
+            assertNodeGatewayStartedShardsHappyCase(nodeGatewayStartedShards);
+        }
+    }
+
+    public void testShardFetchCorruptedShardsUsingBatchAction() throws Exception {
+        String indexName = "test";
+        int numOfShards = 1;
+        prepareIndex(indexName, numOfShards);
+        Map<ShardId, ShardAttributes> shardIdShardAttributesMap = prepareRequestMap(new String[] { indexName }, numOfShards);
+        ClusterSearchShardsResponse searchShardsResponse = client().admin().cluster().prepareSearchShards(indexName).get();
+        final Index index = resolveIndex(indexName);
+        final ShardId shardId = new ShardId(index, 0);
+        corruptShard(searchShardsResponse.getNodes()[0].getName(), shardId);
+        TransportNodesListGatewayStartedShardsBatch.NodesGatewayStartedShardsBatch response;
+        internalCluster().restartNode(searchShardsResponse.getNodes()[0].getName());
+        response = ActionTestUtils.executeBlocking(
+            internalCluster().getInstance(TransportNodesListGatewayStartedShardsBatch.class),
+            new TransportNodesListGatewayStartedShardsBatch.Request(getDiscoveryNodes(), shardIdShardAttributesMap)
+        );
+        DiscoveryNode[] discoveryNodes = getDiscoveryNodes();
+        TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard nodeGatewayStartedShards = response.getNodesMap()
+            .get(discoveryNodes[0].getId())
+            .getNodeGatewayStartedShardsBatch()
+            .get(shardId);
+        assertNotNull(nodeGatewayStartedShards.storeException());
+        assertNotNull(nodeGatewayStartedShards.allocationId());
+        assertTrue(nodeGatewayStartedShards.primary());
+    }
+
     public void testSingleShardStoreFetchUsingBatchAction() throws ExecutionException, InterruptedException {
         String indexName = "test";
         DiscoveryNode[] nodes = getDiscoveryNodes();
@@ -881,83 +957,6 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         assertFalse(storeFileMetadata.isEmpty());
         assertEquals(shardId, storeFileMetadata.shardId());
         assertNotNull(storeFileMetadata.peerRecoveryRetentionLeases());
-    }
-
-
-    public void testSingleShardFetchUsingBatchAction() {
-        String indexName = "test";
-        int numOfShards = 1;
-        prepareIndex(indexName, numOfShards);
-        Map<ShardId, ShardAttributes> shardIdShardAttributesMap = prepareRequestMap(new String[] { indexName }, numOfShards);
-
-        ClusterSearchShardsResponse searchShardsResponse = client().admin().cluster().prepareSearchShards(indexName).get();
-
-        TransportNodesListGatewayStartedShardsBatch.NodesGatewayStartedShardsBatch response;
-        response = ActionTestUtils.executeBlocking(
-            internalCluster().getInstance(TransportNodesListGatewayStartedShardsBatch.class),
-            new TransportNodesListGatewayStartedShardsBatch.Request(searchShardsResponse.getNodes(), shardIdShardAttributesMap)
-        );
-        final Index index = resolveIndex(indexName);
-        final ShardId shardId = new ShardId(index, 0);
-        TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard nodeGatewayStartedShards = response.getNodesMap()
-            .get(searchShardsResponse.getNodes()[0].getId())
-            .getNodeGatewayStartedShardsBatch()
-            .get(shardId);
-        assertNodeGatewayStartedShardsHappyCase(nodeGatewayStartedShards);
-    }
-
-    public void testShardFetchMultiNodeMultiIndexesUsingBatchAction() {
-        // start node
-        internalCluster().startNode();
-        String indexName1 = "test1";
-        String indexName2 = "test2";
-        int numShards = internalCluster().numDataNodes();
-        // assign one primary shard each to the data nodes
-        prepareIndex(indexName1, numShards);
-        prepareIndex(indexName2, numShards);
-        Map<ShardId, ShardAttributes> shardIdShardAttributesMap = prepareRequestMap(new String[] { indexName1, indexName2 }, numShards);
-        ClusterSearchShardsResponse searchShardsResponse = client().admin().cluster().prepareSearchShards(indexName1, indexName2).get();
-        assertEquals(internalCluster().numDataNodes(), searchShardsResponse.getNodes().length);
-        TransportNodesListGatewayStartedShardsBatch.NodesGatewayStartedShardsBatch response;
-        response = ActionTestUtils.executeBlocking(
-            internalCluster().getInstance(TransportNodesListGatewayStartedShardsBatch.class),
-            new TransportNodesListGatewayStartedShardsBatch.Request(searchShardsResponse.getNodes(), shardIdShardAttributesMap)
-        );
-        for (ClusterSearchShardsGroup clusterSearchShardsGroup : searchShardsResponse.getGroups()) {
-            ShardId shardId = clusterSearchShardsGroup.getShardId();
-            assertEquals(1, clusterSearchShardsGroup.getShards().length);
-            String nodeId = clusterSearchShardsGroup.getShards()[0].currentNodeId();
-            TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard nodeGatewayStartedShards = response.getNodesMap()
-                .get(nodeId)
-                .getNodeGatewayStartedShardsBatch()
-                .get(shardId);
-            assertNodeGatewayStartedShardsHappyCase(nodeGatewayStartedShards);
-        }
-    }
-
-    public void testShardFetchCorruptedShardsUsingBatchAction() throws Exception {
-        String indexName = "test";
-        int numOfShards = 1;
-        prepareIndex(indexName, numOfShards);
-        Map<ShardId, ShardAttributes> shardIdShardAttributesMap = prepareRequestMap(new String[] { indexName }, numOfShards);
-        ClusterSearchShardsResponse searchShardsResponse = client().admin().cluster().prepareSearchShards(indexName).get();
-        final Index index = resolveIndex(indexName);
-        final ShardId shardId = new ShardId(index, 0);
-        corruptShard(searchShardsResponse.getNodes()[0].getName(), shardId);
-        TransportNodesListGatewayStartedShardsBatch.NodesGatewayStartedShardsBatch response;
-        internalCluster().restartNode(searchShardsResponse.getNodes()[0].getName());
-        response = ActionTestUtils.executeBlocking(
-            internalCluster().getInstance(TransportNodesListGatewayStartedShardsBatch.class),
-            new TransportNodesListGatewayStartedShardsBatch.Request(getDiscoveryNodes(), shardIdShardAttributesMap)
-        );
-        DiscoveryNode[] discoveryNodes = getDiscoveryNodes();
-        TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard nodeGatewayStartedShards = response.getNodesMap()
-            .get(discoveryNodes[0].getId())
-            .getNodeGatewayStartedShardsBatch()
-            .get(shardId);
-        assertNotNull(nodeGatewayStartedShards.storeException());
-        assertNotNull(nodeGatewayStartedShards.allocationId());
-        assertTrue(nodeGatewayStartedShards.primary());
     }
 
     private void assertNodeGatewayStartedShardsHappyCase(
