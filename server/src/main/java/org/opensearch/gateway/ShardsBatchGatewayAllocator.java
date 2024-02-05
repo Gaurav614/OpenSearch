@@ -87,13 +87,13 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
     // visible for testing
     protected final ConcurrentMap<String, ShardsBatch> batchIdToStoreShardBatch = ConcurrentCollections.newConcurrentMap();
 
-    private final TransportNodesListGatewayStartedBatchShards batchStartedAction;
+    private final TransportNodesListGatewayStartedShardsBatch batchStartedAction;
     private final TransportNodesListShardStoreMetadataBatch batchStoreAction;
 
     @Inject
     public ShardsBatchGatewayAllocator(
         RerouteService rerouteService,
-        TransportNodesListGatewayStartedBatchShards batchStartedAction,
+        TransportNodesListGatewayStartedShardsBatch batchStartedAction,
         TransportNodesListShardStoreMetadataBatch batchStoreAction,
         Settings settings
     ) {
@@ -458,7 +458,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
 
         @Override
         @SuppressWarnings("unchecked")
-        protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch> fetchData(
+        protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> fetchData(
             Set<ShardRouting> shardsEligibleForFetch,
             Set<ShardRouting> inEligibleShards,
             RoutingAllocation allocation
@@ -504,7 +504,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
             if (shardBatchState.hasData()) {
                 shardBatchState.processAllocation(allocation);
             }
-            return (AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch>) shardBatchState;
+            return (AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch>) shardBatchState;
         }
 
     }

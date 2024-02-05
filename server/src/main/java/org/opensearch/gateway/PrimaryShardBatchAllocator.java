@@ -15,8 +15,8 @@ import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.routing.allocation.AllocateUnassignedDecision;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.gateway.AsyncShardFetch.FetchResult;
-import org.opensearch.gateway.TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard;
-import org.opensearch.gateway.TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch;
+import org.opensearch.gateway.TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard;
+import org.opensearch.gateway.TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch;
 
 import java.util.ArrayList;
 import java.util.Collections;
