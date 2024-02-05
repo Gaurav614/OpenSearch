@@ -69,7 +69,7 @@ import java.util.stream.Stream;
  * that holds a copy of the shard.  The shard metadata from each node is compared against the
  * set of valid allocation IDs and for all valid shard copies (if any), the primary shard allocator
  * executes the allocation deciders to chose a copy to assign the primary shard to.
- *
+ * <p>
  * Note that the PrimaryShardAllocator does *not* allocate primaries on index creation
  * (see {@link org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator}),
  * nor does it allocate primaries when a primary shard failed and there is a valid replica
@@ -132,8 +132,7 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
     /**
     * Transforms {@link FetchResult} of {@link NodeGatewayStartedShards} to {@link List} of {@link NodeGatewayStartedShards}
     * Returns null if {@link FetchResult} does not have any data.
-    *
-    * */
+    */
     private static List<NodeGatewayStartedShards> adaptToNodeStartedShardList(FetchResult<NodeGatewayStartedShards> shardsState) {
         if (!shardsState.hasData()) {
             return null;
