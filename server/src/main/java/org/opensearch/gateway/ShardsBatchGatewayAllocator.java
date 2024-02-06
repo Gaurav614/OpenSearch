@@ -60,7 +60,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
 
     private static final Logger logger = LogManager.getLogger(ShardsBatchGatewayAllocator.class);
     private final long maxBatchSize;
-    private final boolean batchMode;
+//    private final boolean batchMode;
     private static final short DEFAULT_SHARD_BATCH_SIZE = 2000;
 
     /**
@@ -103,7 +103,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
         this.batchStartedAction = batchStartedAction;
         this.batchStoreAction = batchStoreAction;
         this.maxBatchSize = GATEWAY_ALLOCATOR_BATCH_SIZE.get(settings);
-        this.batchMode = EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.get(settings);
+//        this.batchMode = EXISTING_SHARDS_ALLOCATOR_BATCH_MODE.get(settings);
     }
 
     @Override
@@ -126,7 +126,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
         this.batchStoreAction = null;
         this.replicaBatchShardAllocator = null;
         this.maxBatchSize = DEFAULT_SHARD_BATCH_SIZE;
-        this.batchMode = true;
+//        this.batchMode = true;
     }
 
     // for tests
