@@ -238,7 +238,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
 
     class TestBatchAllocator extends PrimaryShardBatchAllocator {
 
-        private Map<DiscoveryNode, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch> data;
+        private Map<DiscoveryNode, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> data;
 
         public TestBatchAllocator clear() {
             data = null;
@@ -288,16 +288,16 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             if (data == null) {
                 data = new HashMap<>();
             }
-            Map<ShardId, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard> shardData = Map.of(
+            Map<ShardId, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard> shardData = Map.of(
                 shardId,
-                new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard(
+                new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard(
                     allocationId,
                     primary,
                     replicationCheckpoint,
                     storeException
                 )
             );
-            data.put(node, new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch(node, shardData));
+            data.put(node, new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch(node, shardData));
             return this;
         }
 
@@ -312,10 +312,10 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             if (data == null) {
                 data = new HashMap<>();
             }
-            Map<ShardId, TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard> shardData = new HashMap<>();
+            Map<ShardId, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard> shardData = new HashMap<>();
             shardData.put(
                 shardId,
-                new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShard(
+                new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard(
                     allocationId,
                     primary,
                     replicationCheckpoint,
@@ -323,12 +323,12 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
                 )
             );
             if (data.get(node) != null) shardData.putAll(data.get(node).getNodeGatewayStartedShardsBatch());
-            data.put(node, new TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch(node, shardData));
+            data.put(node, new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch(node, shardData));
             return this;
         }
 
         @Override
-        protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedBatchShards.NodeGatewayStartedShardsBatch> fetchData(
+        protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> fetchData(
             Set<ShardRouting> shardsEligibleForFetch,
             Set<ShardRouting> inEligibleShards,
             RoutingAllocation allocation

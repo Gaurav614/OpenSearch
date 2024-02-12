@@ -44,9 +44,9 @@ import org.opensearch.index.seqno.ReplicationTracker;
 import org.opensearch.index.seqno.RetentionLease;
 import org.opensearch.index.store.Store;
 import org.opensearch.index.store.StoreFileMetadata;
-import org.opensearch.indices.store.StoreFilesMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch;
+import org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper;
 import org.opensearch.snapshots.SnapshotShardSizeInfo;
 import org.junit.Before;
 
@@ -801,7 +801,7 @@ public class ReplicaShardBatchAllocatorTest extends OpenSearchAllocationTestCase
             data.put(
                 node,
                 new TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata(
-                    new StoreFilesMetadata(
+                    new TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata(
                         shardId,
                         new Store.MetadataSnapshot(unmodifiableMap(filesAsMap), unmodifiableMap(commitData), randomInt()),
                         peerRecoveryRetentionLeases
