@@ -577,6 +577,7 @@ public class AllocationService {
             ExistingShardsAllocator allocator = existingShardsAllocators.get(ShardsBatchGatewayAllocator.ALLOCATOR_NAME);
             allocator.allocateAllUnassignedShards(allocation, true);
             allocator.afterPrimariesBeforeReplicas(allocation);
+            // Replicas Assignment
             allocator.allocateAllUnassignedShards(allocation, false);
             return;
         }
@@ -704,7 +705,7 @@ public class AllocationService {
         final String allocatorName = ExistingShardsAllocator.EXISTING_SHARDS_ALLOCATOR_SETTING.get(
             routingAllocation.metadata().getIndexSafe(shardRouting.index()).getSettings()
         );
-        ExistingShardsAllocator existingShardsAllocator = existingShardsAllocators.get(allocatorName);
+        final ExistingShardsAllocator existingShardsAllocator = existingShardsAllocators.get(allocatorName);
         return existingShardsAllocator != null ? existingShardsAllocator : new NotFoundAllocator(allocatorName);
     }
 
