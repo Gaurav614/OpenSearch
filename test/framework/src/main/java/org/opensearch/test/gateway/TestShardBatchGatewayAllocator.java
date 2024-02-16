@@ -54,8 +54,8 @@ public class TestShardBatchGatewayAllocator extends ShardsBatchGatewayAllocator 
                     if (shardsOnNode.containsKey(shardId) && ignoreNodes.contains(nodeId) == false && currentNodes.nodeExists(nodeId)) {
                         TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard nodeShard =
                             new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard(
-                                shardRouting.allocationId().getId(),
-                                shardRouting.primary(),
+                                shardsOnNode.get(shardId).allocationId().getId(),
+                                shardsOnNode.get(shardId).primary(),
                                 getReplicationCheckpoint(shardId, nodeId)
                             );
                         adaptedResponse.put(shardId, nodeShard);
