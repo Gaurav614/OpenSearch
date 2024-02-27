@@ -32,8 +32,8 @@
 
 package org.opensearch.gateway;
 
-import org.opensearch.Version;
 import org.apache.lucene.index.CorruptIndexException;
+import org.opensearch.Version;
 import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsAction;
 import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsRequest;
 import org.opensearch.action.admin.cluster.configuration.ClearVotingConfigExclusionsAction;
@@ -975,7 +975,6 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         index(indexName, "type", "1", Collections.emptyMap());
         flush(indexName);
     }
-
 
     public void testBatchModeEnabled() throws Exception {
         internalCluster().startClusterManagerOnlyNodes(

@@ -124,7 +124,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
         this.batchStoreAction = null;
         this.replicaShardBatchAllocator = null;
         this.maxBatchSize = DEFAULT_SHARD_BATCH_SIZE;
-//        this.batchMode = true;
+        // this.batchMode = true;
     }
 
     // for tests
@@ -166,7 +166,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
     @Override
     public void afterPrimariesBeforeReplicas(RoutingAllocation allocation) {
         assert replicaShardBatchAllocator != null;
-        List<Set<ShardRouting>> storedShardBatches = batchIdToStoreShardBatch.values()
+        List<List<ShardRouting>> storedShardBatches = batchIdToStoreShardBatch.values()
             .stream()
             .map(ShardsBatch::getBatchedShardRoutings)
             .collect(Collectors.toList());
@@ -456,8 +456,8 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
         @Override
         @SuppressWarnings("unchecked")
         protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> fetchData(
-            Set<ShardRouting> shardsEligibleForFetch,
-            Set<ShardRouting> inEligibleShards,
+            List<ShardRouting> shardsEligibleForFetch,
+            List<ShardRouting> inEligibleShards,
             RoutingAllocation allocation
         ) {
             ShardRouting shardRouting = shardsEligibleForFetch.iterator().hasNext() ? shardsEligibleForFetch.iterator().next() : null;
@@ -600,8 +600,8 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
             assert batchInfo.size() == asyncBatch.shardAttributesMap.size() : "Shards size is not equal to fetcher size";
         }
 
-        public Set<ShardRouting> getBatchedShardRoutings() {
-            return batchInfo.values().stream().map(ShardEntry::getShardRouting).collect(Collectors.toSet());
+        public List<ShardRouting> getBatchedShardRoutings() {
+            return batchInfo.values().stream().map(ShardEntry::getShardRouting).collect(Collectors.toList());
         }
 
         public Set<ShardId> getBatchedShards() {

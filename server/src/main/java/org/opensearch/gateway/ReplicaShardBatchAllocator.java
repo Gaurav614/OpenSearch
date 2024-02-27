@@ -20,9 +20,9 @@ import org.opensearch.cluster.routing.allocation.RoutingAllocation;
 import org.opensearch.cluster.routing.allocation.decider.Decision;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.gateway.AsyncShardFetch.FetchResult;
-import org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch;
+import org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,10 +45,10 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
      * match. Today, a better match is one that can perform a no-op recovery while the previous recovery
      * has to copy segment files.
      */
-    public void processExistingRecoveries(RoutingAllocation allocation, List<Set<ShardRouting>> shardBatches) {
+    public void processExistingRecoveries(RoutingAllocation allocation, List<List<ShardRouting>> shardBatches) {
         RoutingNodes routingNodes = allocation.routingNodes();
         List<Runnable> shardCancellationActions = new ArrayList<>();
-        for (Set<ShardRouting> shardBatch : shardBatches) {
+        for (List<ShardRouting> shardBatch : shardBatches) {
             Set<ShardRouting> eligibleFetchShards = new HashSet<>();
             Set<ShardRouting> ineligibleShards = new HashSet<>();
             boolean shardMatched;
@@ -109,12 +109,12 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
 
     @Override
     public AllocateUnassignedDecision makeAllocationDecision(ShardRouting unassignedShard, RoutingAllocation allocation, Logger logger) {
-        return makeAllocationDecision(new HashSet<>(Collections.singletonList(unassignedShard)), allocation, logger).get(unassignedShard);
+        return makeAllocationDecision(Collections.singletonList(unassignedShard), allocation, logger).get(unassignedShard);
     }
 
     @Override
     public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(
-        Set<ShardRouting> shards,
+        List<ShardRouting> shards,
         RoutingAllocation allocation,
         Logger logger
     ) {

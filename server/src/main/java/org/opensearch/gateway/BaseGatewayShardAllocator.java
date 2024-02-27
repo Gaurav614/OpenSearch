@@ -48,7 +48,6 @@ import org.opensearch.cluster.routing.allocation.decider.Decision;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -87,7 +86,7 @@ public abstract class BaseGatewayShardAllocator {
      * @param shardRoutings the shards to allocate
      * @param allocation the allocation state container object
      */
-    public void allocateUnassignedBatch(Set<ShardRouting> shardRoutings, RoutingAllocation allocation) {
+    public void allocateUnassignedBatch(List<ShardRouting> shardRoutings, RoutingAllocation allocation) {
         // make Allocation Decisions for all shards
         HashMap<ShardRouting, AllocateUnassignedDecision> decisionMap = makeAllocationDecision(shardRoutings, allocation, logger);
         assert shardRoutings.size() == decisionMap.size() : "make allocation decision didn't return allocation decision for "
@@ -102,6 +101,8 @@ public abstract class BaseGatewayShardAllocator {
                     if (decisionMap.containsKey(shard)) {
                         executeDecision(shard, decisionMap.remove(shard), allocation, iterator);
                     }
+                } else {
+                    break;
                 }
             } catch (Exception e) {
                 logger.error("Failed to execute decision for shard {} ", shard);
@@ -161,7 +162,7 @@ public abstract class BaseGatewayShardAllocator {
     );
 
     public HashMap<ShardRouting, AllocateUnassignedDecision> makeAllocationDecision(
-        Set<ShardRouting> unassignedShardBatch,
+        List<ShardRouting> unassignedShardBatch,
         RoutingAllocation allocation,
         Logger logger
     ) {

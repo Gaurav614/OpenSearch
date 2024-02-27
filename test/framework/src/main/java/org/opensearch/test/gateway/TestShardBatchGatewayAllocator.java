@@ -24,6 +24,7 @@ import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -36,8 +37,8 @@ public class TestShardBatchGatewayAllocator extends ShardsBatchGatewayAllocator 
     PrimaryShardBatchAllocator primaryBatchShardAllocator = new PrimaryShardBatchAllocator() {
         @Override
         protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> fetchData(
-            Set<ShardRouting> shardsEligibleForFetch,
-            Set<ShardRouting> inEligibleShards,
+            List<ShardRouting> shardsEligibleForFetch,
+            List<ShardRouting> inEligibleShards,
             RoutingAllocation allocation
         ) {
             Map<DiscoveryNode, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> foundShards = new HashMap<>();
