@@ -79,8 +79,8 @@ public class TestShardBatchGatewayAllocator extends ShardsBatchGatewayAllocator 
 
         @Override
         protected AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> fetchData(
-            Set<ShardRouting> shardsEligibleForFetch,
-            Set<ShardRouting> inEligibleShards,
+            List<ShardRouting> shardsEligibleForFetch,
+            List<ShardRouting> inEligibleShards,
             RoutingAllocation allocation
         ) {
             return new AsyncShardFetch.FetchResult<>(Collections.emptyMap(), Collections.emptyMap());

@@ -510,8 +510,8 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
         @Override
         @SuppressWarnings("unchecked")
         protected AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> fetchData(
-            Set<ShardRouting> shardsEligibleForFetch,
-            Set<ShardRouting> inEligibleShards,
+            List<ShardRouting> shardsEligibleForFetch,
+            List<ShardRouting> inEligibleShards,
             RoutingAllocation allocation
         ) {
             // get batch id for anyone given shard. We are assuming all shards will have same batch Id
