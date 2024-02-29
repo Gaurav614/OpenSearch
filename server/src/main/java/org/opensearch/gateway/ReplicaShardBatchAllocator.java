@@ -74,11 +74,7 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
                     }
                 }
             }
-            AsyncShardFetch.FetchResult<NodeStoreFilesMetadataBatch> shardState = fetchData(
-                eligibleShards,
-                ineligibleShards,
-                allocation
-            );
+            AsyncShardFetch.FetchResult<NodeStoreFilesMetadataBatch> shardState = fetchData(eligibleShards, ineligibleShards, allocation);
             if (!shardState.hasData()) {
                 logger.trace("{}: fetching new stores for initializing shard batch", eligibleShards);
                 continue; // still fetching
@@ -163,11 +159,7 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
             return shardAllocationDecisions;
         }
         // only fetch data for eligible shards
-        final FetchResult<NodeStoreFilesMetadataBatch> shardsState = fetchData(
-            eligibleShards,
-            ineligibleShards,
-            allocation
-        );
+        final FetchResult<NodeStoreFilesMetadataBatch> shardsState = fetchData(eligibleShards, ineligibleShards, allocation);
 
         for (ShardRouting unassignedShard : eligibleShards) {
             Tuple<Decision, Map<String, NodeAllocationResult>> result = nodeAllocationDecisions.get(unassignedShard);
@@ -184,11 +176,13 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
         }
         return shardAllocationDecisions;
     }
-    private Map<DiscoveryNode, StoreFilesMetadata> convertToNodeStoreFilesMetadataMap(
-            ShardRouting unassignedShard,
-            FetchResult<NodeStoreFilesMetadataBatch> data) {
 
-        if(!data.hasData()) {
+    private Map<DiscoveryNode, StoreFilesMetadata> convertToNodeStoreFilesMetadataMap(
+        ShardRouting unassignedShard,
+        FetchResult<NodeStoreFilesMetadataBatch> data
+    ) {
+
+        if (!data.hasData()) {
             return new HashMap<>();
         }
 
@@ -197,7 +191,7 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
         data.getData().forEach((key, value) -> {
             Map<ShardId, NodeStoreFilesMetadata> batch = value.getNodeStoreFilesMetadataBatch();
             NodeStoreFilesMetadata metadata = batch.get(unassignedShard.shardId());
-            if (metadata != null && metadata.getStoreFileFetchException() == null) {
+            if (metadata != null && metadata.getException() == null) {
                 map.put(key, metadata.storeFilesMetadata());
             }
         });

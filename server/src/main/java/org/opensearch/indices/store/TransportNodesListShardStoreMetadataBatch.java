@@ -27,6 +27,7 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.gateway.AsyncShardFetch;
+import org.opensearch.gateway.BaseShardResponse;
 import org.opensearch.index.store.Store;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata;
@@ -227,50 +228,41 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
      *
      * @opensearch.internal
      */
-    public static class NodeStoreFilesMetadata {
+    public static class NodeStoreFilesMetadata extends BaseShardResponse {
 
         private StoreFilesMetadata storeFilesMetadata;
-        private Exception storeFileFetchException;
 
-        public NodeStoreFilesMetadata(StoreFilesMetadata storeFilesMetadata) {
-            this.storeFilesMetadata = storeFilesMetadata;
-            this.storeFileFetchException = null;
+        @Override
+        public boolean isEmpty() {
+            return storeFilesMetadata == null || storeFilesMetadata().isEmpty() && getException() == null;
         }
 
         public NodeStoreFilesMetadata(StreamInput in) throws IOException {
-            storeFilesMetadata = new StoreFilesMetadata(in);
+            super(in);
             if (in.readBoolean()) {
-                this.storeFileFetchException = in.readException();
+                this.storeFilesMetadata = new StoreFilesMetadata(in);
             } else {
-                this.storeFileFetchException = null;
+                this.storeFilesMetadata = null;
             }
         }
 
         public NodeStoreFilesMetadata(StoreFilesMetadata storeFilesMetadata, Exception storeFileFetchException) {
+            super(storeFileFetchException);
             this.storeFilesMetadata = storeFilesMetadata;
-            this.storeFileFetchException = storeFileFetchException;
         }
 
         public StoreFilesMetadata storeFilesMetadata() {
             return storeFilesMetadata;
         }
 
-        public static NodeStoreFilesMetadata readListShardStoreNodeOperationResponse(StreamInput in) throws IOException {
-            return new NodeStoreFilesMetadata(in);
-        }
-
         public void writeTo(StreamOutput out) throws IOException {
-            storeFilesMetadata.writeTo(out);
-            if (storeFileFetchException != null) {
+            super.writeTo(out);
+            if (storeFilesMetadata != null) {
                 out.writeBoolean(true);
-                out.writeException(storeFileFetchException);
+                storeFilesMetadata.writeTo(out);
             } else {
                 out.writeBoolean(false);
             }
-        }
-
-        public Exception getStoreFileFetchException() {
-            return storeFileFetchException;
         }
 
         @Override

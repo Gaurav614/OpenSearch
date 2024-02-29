@@ -33,8 +33,10 @@ import org.opensearch.common.util.concurrent.ConcurrentCollections;
 import org.opensearch.common.util.set.Sets;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.index.store.Store;
 import org.opensearch.indices.store.ShardAttributes;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
+import org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -46,6 +48,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.Spliterators;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -425,15 +431,31 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
         return false;
     }
 
-    class InternalBatchAsyncFetch<T extends BaseNodeResponse> extends AsyncShardFetch<T> {
+    class InternalBatchAsyncFetch<T extends BaseNodeResponse, V extends BaseShardResponse> extends AsyncShardBatchFetch<T, V> {
         InternalBatchAsyncFetch(
             Logger logger,
             String type,
             Map<ShardId, ShardAttributes> map,
             AsyncShardFetch.Lister<? extends BaseNodesResponse<T>, T> action,
-            String batchUUId
+            String batchUUId,
+            Class<V> clazz,
+            BiFunction<DiscoveryNode, Map<ShardId, V>, T> responseBuilder,
+            Function<T, Map<ShardId, V>> shardsBatchDataGetter,
+            Supplier<V> emptyResponseBuilder,
+            Consumer<ShardId> handleFailedShard
         ) {
-            super(logger, type, map, action, batchUUId);
+            super(
+                logger,
+                type,
+                map,
+                action,
+                batchUUId,
+                clazz,
+                responseBuilder,
+                shardsBatchDataGetter,
+                emptyResponseBuilder,
+                handleFailedShard
+            );
         }
 
         @Override
@@ -573,7 +595,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
         private final String batchId;
         private final boolean primary;
 
-        private final AsyncShardFetch<? extends BaseNodeResponse> asyncBatch;
+        private final InternalBatchAsyncFetch<? extends BaseNodeResponse, ? extends BaseShardResponse> asyncBatch;
 
         private final Map<ShardId, ShardEntry> batchInfo;
 
@@ -585,17 +607,83 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
                 .stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getShardAttributes()));
             this.primary = primary;
-            if (primary) {
-                asyncBatch = new InternalBatchAsyncFetch<>(logger, "batch_shards_started", shardIdsMap, batchStartedAction, batchId);
+            if (this.primary) {
+                asyncBatch = new InternalBatchAsyncFetch<>(
+                    logger,
+                    "batch_shards_started",
+                    shardIdsMap,
+                    batchStartedAction,
+                    batchId,
+                    TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard.class,
+                    this::buildPrimaryBatchResponse,
+                    this::getPrimaryShardDataFromResponse,
+                    this::buildEmptyPrimaryShardResponse,
+                    this::removeShard
+                );
             } else {
-                asyncBatch = new InternalBatchAsyncFetch<>(logger, "batch_shards_started", shardIdsMap, batchStoreAction, batchId);
-
+                asyncBatch = new InternalBatchAsyncFetch<>(
+                    logger,
+                    "batch_shards_store",
+                    shardIdsMap,
+                    batchStoreAction,
+                    batchId,
+                    TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata.class,
+                    this::buildReplicaBatchResponse,
+                    this::getReplicaShardDataFromResponse,
+                    this::buildEmptyReplicaShardResponse,
+                    this::removeShard
+                );
             }
         }
 
+        private void removeShard(ShardId shardId) {
+            this.batchInfo.remove(shardId);
+        }
+
+        private TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata buildEmptyReplicaShardResponse() {
+            return new TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata(
+                new TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata(
+                    null,
+                    Store.MetadataSnapshot.EMPTY,
+                    Collections.emptyList()
+                ),
+                null
+            );
+        }
+
+        private TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard buildEmptyPrimaryShardResponse() {
+            return new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard(null, false, null, null);
+        }
+
+        public TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch buildPrimaryBatchResponse(
+            DiscoveryNode node,
+            Map<ShardId, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard> batchData
+        ) {
+            return new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch(node, batchData);
+        }
+
+        public Map<ShardId, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard> getPrimaryShardDataFromResponse(
+            TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch response
+        ) {
+            return response.getNodeGatewayStartedShardsBatch();
+        }
+
+        public Map<ShardId, TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata> getReplicaShardDataFromResponse(
+            TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch response
+        ) {
+            return response.getNodeStoreFilesMetadataBatch();
+        }
+
+        public TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch buildReplicaBatchResponse(
+            DiscoveryNode node,
+            Map<ShardId, TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata> batchData
+        ) {
+            return new TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch(node, batchData);
+        }
+
         private void removeFromBatch(ShardRouting shard) {
-            batchInfo.remove(shard.shardId());
-            asyncBatch.shardAttributesMap.remove(shard.shardId());
+            removeShard(shard.shardId());
+            asyncBatch.clearShard(shard.shardId());
             // assert that fetcher and shards are the same as batched shards
             assert batchInfo.size() == asyncBatch.shardAttributesMap.size() : "Shards size is not equal to fetcher size";
         }

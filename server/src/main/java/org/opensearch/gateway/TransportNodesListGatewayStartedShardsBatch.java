@@ -9,6 +9,7 @@
 package org.opensearch.gateway;
 
 import org.opensearch.OpenSearchException;
+import org.opensearch.Version;
 import org.opensearch.action.ActionType;
 import org.opensearch.action.FailedNodeException;
 import org.opensearch.action.support.ActionFilters;
@@ -257,21 +258,21 @@ public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesA
      *
      * @opensearch.internal
      */
-    public static class NodeGatewayStartedShard {
+    public static class NodeGatewayStartedShard extends BaseShardResponse {
         private final String allocationId;
         private final boolean primary;
-        private final Exception storeException;
         private final ReplicationCheckpoint replicationCheckpoint;
 
+        @Override
+        public boolean isEmpty() {
+            return allocationId == null && primary == false && getException() == null && replicationCheckpoint == null;
+        }
+
         public NodeGatewayStartedShard(StreamInput in) throws IOException {
+            super(in);
             allocationId = in.readOptionalString();
             primary = in.readBoolean();
-            if (in.readBoolean()) {
-                storeException = in.readException();
-            } else {
-                storeException = null;
-            }
-            if (in.readBoolean()) {
+            if (in.getVersion().onOrAfter(Version.V_2_3_0) && in.readBoolean()) {
                 replicationCheckpoint = new ReplicationCheckpoint(in);
             } else {
                 replicationCheckpoint = null;
@@ -288,10 +289,10 @@ public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesA
             ReplicationCheckpoint replicationCheckpoint,
             Exception storeException
         ) {
+            super(storeException);
             this.allocationId = allocationId;
             this.primary = primary;
             this.replicationCheckpoint = replicationCheckpoint;
-            this.storeException = storeException;
         }
 
         public String allocationId() {
@@ -306,24 +307,17 @@ public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesA
             return this.replicationCheckpoint;
         }
 
-        public Exception storeException() {
-            return this.storeException;
-        }
-
         public void writeTo(StreamOutput out) throws IOException {
+            super.writeTo(out);
             out.writeOptionalString(allocationId);
             out.writeBoolean(primary);
-            if (storeException != null) {
-                out.writeBoolean(true);
-                out.writeException(storeException);
-            } else {
-                out.writeBoolean(false);
-            }
-            if (replicationCheckpoint != null) {
-                out.writeBoolean(true);
-                replicationCheckpoint.writeTo(out);
-            } else {
-                out.writeBoolean(false);
+            if (out.getVersion().onOrAfter(Version.V_2_3_0)) {
+                if (replicationCheckpoint != null) {
+                    out.writeBoolean(true);
+                    replicationCheckpoint.writeTo(out);
+                } else {
+                    out.writeBoolean(false);
+                }
             }
         }
 
@@ -340,7 +334,7 @@ public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesA
 
             return primary == that.primary
                 && Objects.equals(allocationId, that.allocationId)
-                && Objects.equals(storeException, that.storeException)
+                && Objects.equals(getException(), that.getException())
                 && Objects.equals(replicationCheckpoint, that.replicationCheckpoint);
         }
 
@@ -348,7 +342,7 @@ public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesA
         public int hashCode() {
             int result = (allocationId != null ? allocationId.hashCode() : 0);
             result = 31 * result + (primary ? 1 : 0);
-            result = 31 * result + (storeException != null ? storeException.hashCode() : 0);
+            result = 31 * result + (getException() != null ? getException().hashCode() : 0);
             result = 31 * result + (replicationCheckpoint != null ? replicationCheckpoint.hashCode() : 0);
             return result;
         }
@@ -357,8 +351,8 @@ public class TransportNodesListGatewayStartedShardsBatch extends TransportNodesA
         public String toString() {
             StringBuilder buf = new StringBuilder();
             buf.append("NodeGatewayStartedShards[").append("allocationId=").append(allocationId).append(",primary=").append(primary);
-            if (storeException != null) {
-                buf.append(",storeException=").append(storeException);
+            if (getException() != null) {
+                buf.append(",storeException=").append(getException());
             }
             if (replicationCheckpoint != null) {
                 buf.append(",ReplicationCheckpoint=").append(replicationCheckpoint.toString());
