@@ -139,15 +139,15 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
      */
     private Map<ShardId, NodeStoreFilesMetadata> listStoreMetadata(NodeRequest request) throws IOException {
         Map<ShardId, NodeStoreFilesMetadata> shardStoreMetadataMap = new HashMap<ShardId, NodeStoreFilesMetadata>();
-        for (ShardAttributes shardAttributes : request.getShardAttributes().values()) {
-            final ShardId shardId = shardAttributes.getShardId();
+        for (Map.Entry<ShardId, ShardAttributes> shardAttributes : request.getShardAttributes().entrySet()) {
+            final ShardId shardId = shardAttributes.getKey();
             try {
                 StoreFilesMetadata storeFilesMetadata = TransportNodesListShardStoreMetadataHelper.getListShardMetadataOnLocalNode(
                     logger,
                     shardId,
                     nodeEnv,
                     indicesService,
-                    shardAttributes.getCustomDataPath(),
+                    shardAttributes.getValue().getCustomDataPath(),
                     settings,
                     clusterService
                 );

@@ -29,7 +29,6 @@ public class ShardAttributesTests extends OpenSearchTestCase {
 
     public void testShardAttributesConstructor() {
         ShardAttributes attributes = new ShardAttributes(shardId, customDataPath);
-        assertEquals(attributes.getShardId(), shardId);
         assertEquals(attributes.getCustomDataPath(), customDataPath);
     }
 
@@ -42,7 +41,6 @@ public class ShardAttributesTests extends OpenSearchTestCase {
         StreamInput input = new InputStreamStreamInput(new ByteArrayInputStream(bytes.toByteArray()));
         ShardAttributes attributes2 = new ShardAttributes(input);
         input.close();
-        assertEquals(attributes1.getShardId(), attributes2.getShardId());
         assertEquals(attributes1.getCustomDataPath(), attributes2.getCustomDataPath());
     }
 

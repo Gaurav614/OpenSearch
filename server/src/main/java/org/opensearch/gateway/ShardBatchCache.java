@@ -215,8 +215,8 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
         }
 
         void doneFetching(Map<ShardId, V> shardDataFromNode, Map<ShardId, Integer> shardIdKey) {
-            super.doneFetching();
             fillShardData(shardDataFromNode, shardIdKey);
+            super.doneFetching();
         }
 
         void clearShard(Integer shardIdIndex) {

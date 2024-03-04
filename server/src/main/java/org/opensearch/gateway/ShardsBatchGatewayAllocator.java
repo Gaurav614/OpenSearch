@@ -514,7 +514,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
             for (ShardId shardId : shardsBatch.asyncBatch.shardAttributesMap.keySet()) {
                 shardToIgnoreNodes.put(shardId, allocation.getIgnoreNodes(shardId));
             }
-            AsyncShardFetch<? extends BaseNodeResponse> asyncFetcher = shardsBatch.getAsyncFetcher();
+            AsyncShardBatchFetch<? extends BaseNodeResponse, ? extends BaseShardResponse> asyncFetcher = shardsBatch.getAsyncFetcher();
             AsyncShardFetch.FetchResult<? extends BaseNodeResponse> shardBatchState = asyncFetcher.fetchData(
                 allocation.nodes(),
                 shardToIgnoreNodes
@@ -567,7 +567,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
             for (ShardId shardId : shardsBatch.asyncBatch.shardAttributesMap.keySet()) {
                 shardToIgnoreNodes.put(shardId, allocation.getIgnoreNodes(shardId));
             }
-            AsyncShardFetch<? extends BaseNodeResponse> asyncFetcher = shardsBatch.getAsyncFetcher();
+            AsyncShardBatchFetch<? extends BaseNodeResponse, ? extends BaseShardResponse> asyncFetcher = shardsBatch.getAsyncFetcher();
             AsyncShardFetch.FetchResult<? extends BaseNodeResponse> shardBatchStores = asyncFetcher.fetchData(
                 allocation.nodes(),
                 shardToIgnoreNodes
@@ -615,9 +615,9 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
                     batchStartedAction,
                     batchId,
                     TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard.class,
-                    this::buildPrimaryBatchResponse,
-                    this::getPrimaryShardDataFromResponse,
-                    this::buildEmptyPrimaryShardResponse,
+                    TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch::new,
+                    TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch::getNodeGatewayStartedShardsBatch,
+                    () -> new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard(null, false, null, null),
                     this::removeShard
                 );
             } else {
@@ -628,15 +628,15 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
                     batchStoreAction,
                     batchId,
                     TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata.class,
-                    this::buildReplicaBatchResponse,
-                    this::getReplicaShardDataFromResponse,
+                    TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch::new,
+                    TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch::getNodeStoreFilesMetadataBatch,
                     this::buildEmptyReplicaShardResponse,
                     this::removeShard
                 );
             }
         }
 
-        private void removeShard(ShardId shardId) {
+        protected void removeShard(ShardId shardId) {
             this.batchInfo.remove(shardId);
         }
 
@@ -649,36 +649,6 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
                 ),
                 null
             );
-        }
-
-        private TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard buildEmptyPrimaryShardResponse() {
-            return new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard(null, false, null, null);
-        }
-
-        public TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch buildPrimaryBatchResponse(
-            DiscoveryNode node,
-            Map<ShardId, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard> batchData
-        ) {
-            return new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch(node, batchData);
-        }
-
-        public Map<ShardId, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard> getPrimaryShardDataFromResponse(
-            TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch response
-        ) {
-            return response.getNodeGatewayStartedShardsBatch();
-        }
-
-        public Map<ShardId, TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata> getReplicaShardDataFromResponse(
-            TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch response
-        ) {
-            return response.getNodeStoreFilesMetadataBatch();
-        }
-
-        public TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch buildReplicaBatchResponse(
-            DiscoveryNode node,
-            Map<ShardId, TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata> batchData
-        ) {
-            return new TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch(node, batchData);
         }
 
         private void removeFromBatch(ShardRouting shard) {
@@ -700,7 +670,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
             return batchId;
         }
 
-        public AsyncShardFetch<? extends BaseNodeResponse> getAsyncFetcher() {
+        public AsyncShardBatchFetch<? extends BaseNodeResponse, ? extends BaseShardResponse> getAsyncFetcher() {
             return asyncBatch;
         }
 

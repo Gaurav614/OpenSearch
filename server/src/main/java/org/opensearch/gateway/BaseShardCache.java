@@ -78,7 +78,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
     /**
      * Returns the number of fetches that are currently ongoing.
      */
-    public int getInflightFetches() {
+    int getInflightFetches() {
         int count = 0;
         for (BaseNodeEntry nodeEntry : getCache().values()) {
             if (nodeEntry.isFetching()) {
@@ -92,7 +92,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
      * Fills the shard fetched data with new (data) nodes and a fresh NodeEntry, and removes from
      * it nodes that are no longer part of the state.
      */
-    public void fillCacheWithDataNodes(DiscoveryNodes nodes) {
+    void fillCacheWithDataNodes(DiscoveryNodes nodes) {
         // verify that all current data nodes are there
         for (final DiscoveryNode node : nodes.getDataNodes().values()) {
             if (getCache().containsKey(node.getId()) == false) {
@@ -107,7 +107,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
      * Finds all the nodes that need to be fetched. Those are nodes that have no
      * data, and are not in fetch mode.
      */
-    public List<String> findNodesToFetch() {
+    List<String> findNodesToFetch() {
         List<String> nodesToFetch = new ArrayList<>();
         for (BaseNodeEntry nodeEntry : getCache().values()) {
             if (nodeEntry.hasData() == false && nodeEntry.isFetching() == false) {
@@ -120,7 +120,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
     /**
      * Are there any nodes that are fetching data?
      */
-    public boolean hasAnyNodeFetching() {
+    boolean hasAnyNodeFetching() {
         for (BaseNodeEntry nodeEntry : getCache().values()) {
             if (nodeEntry.isFetching()) {
                 return true;
@@ -136,7 +136,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
      * @param failedNodes return failedNodes with the nodes where fetch has failed.
      * @return Map of cache data for every DiscoveryNode.
      */
-    public Map<DiscoveryNode, K> getCacheData(DiscoveryNodes nodes, Set<String> failedNodes) {
+     Map<DiscoveryNode, K> getCacheData(DiscoveryNodes nodes, Set<String> failedNodes) {
         Map<DiscoveryNode, K> fetchData = new HashMap<>();
         for (Iterator<? extends Map.Entry<String, ? extends BaseNodeEntry>> it = getCache().entrySet().iterator(); it.hasNext();) {
             Map.Entry<String, BaseNodeEntry> entry = (Map.Entry<String, BaseNodeEntry>) it.next();
@@ -161,7 +161,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
         return fetchData;
     }
 
-    public void processResponses(List<K> responses, long fetchingRound) {
+    void processResponses(List<K> responses, long fetchingRound) {
         for (K response : responses) {
             BaseNodeEntry nodeEntry = getCache().get(response.getNode().getId());
             if (nodeEntry != null) {
@@ -174,7 +174,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
         }
     }
 
-    public boolean validateNodeResponse(BaseNodeEntry nodeEntry, long fetchingRound) {
+    boolean validateNodeResponse(BaseNodeEntry nodeEntry, long fetchingRound) {
         if (nodeEntry.getFetchingRound() != fetchingRound) {
             assert nodeEntry.getFetchingRound() > fetchingRound : "node entries only replaced by newer rounds";
             logger.trace(
@@ -193,7 +193,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
         return true;
     }
 
-    public void handleNodeFailure(BaseNodeEntry nodeEntry, FailedNodeException failure, long fetchingRound) {
+    void handleNodeFailure(BaseNodeEntry nodeEntry, FailedNodeException failure, long fetchingRound) {
         if (nodeEntry.getFetchingRound() != fetchingRound) {
             assert nodeEntry.getFetchingRound() > fetchingRound : "node entries only replaced by newer rounds";
             logger.trace(
@@ -222,7 +222,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
         }
     }
 
-    public void processFailures(List<FailedNodeException> failures, long fetchingRound) {
+    void processFailures(List<FailedNodeException> failures, long fetchingRound) {
         for (FailedNodeException failure : failures) {
             logger.trace("{} processing failure {} for [{}]", logKey, failure, type);
             BaseNodeEntry nodeEntry = getCache().get(failure.nodeId());
@@ -232,11 +232,11 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
         }
     }
 
-    public void remove(String nodeId) {
+    void remove(String nodeId) {
         this.getCache().remove(nodeId);
     }
 
-    public void markAsFetching(List<String> nodeIds, long fetchingRound) {
+    void markAsFetching(List<String> nodeIds, long fetchingRound) {
         for (String nodeId : nodeIds) {
             getCache().get(nodeId).markAsFetching(fetchingRound);
         }

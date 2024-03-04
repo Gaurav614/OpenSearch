@@ -55,14 +55,6 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
     private final DiscoveryNode node3 = newNode("node3");
     private TestBatchAllocator batchAllocator;
 
-    public static void setUpShards(int numberOfShards) {
-        shardsInBatch = new HashSet<>();
-        for (int shardNumber = 0; shardNumber < numberOfShards; shardNumber++) {
-            ShardId shardId = new ShardId("test", "_na_", shardNumber);
-            shardsInBatch.add(shardId);
-        }
-    }
-
     @Before
     public void buildTestAllocator() {
         this.batchAllocator = new TestBatchAllocator();
@@ -125,7 +117,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
     }
 
     public void testMakeAllocationDecisionDataFetchedMultipleShards() {
-        setUpShards(2);
+        shardsInBatch = BatchTestUtil.setUpShards(2);
         final RoutingAllocation allocation = routingAllocationWithMultiplePrimaries(
             noAllocationDeciders(),
             CLUSTER_RECOVERED,
