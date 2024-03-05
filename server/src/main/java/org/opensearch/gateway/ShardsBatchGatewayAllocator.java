@@ -705,7 +705,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
     /**
      * Holds information about a shard to be allocated in a batch.
      */
-    private class ShardEntry {
+    public class ShardEntry {
 
         private final ShardAttributes shardAttributes;
 
