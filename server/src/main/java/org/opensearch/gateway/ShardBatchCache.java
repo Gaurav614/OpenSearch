@@ -49,13 +49,12 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
     private final Map<Integer, ShardId> shardIdReverseKey = new HashMap<>();
     private final Function<T, Map<ShardId, V>> shardsBatchDataGetter;
     private final Supplier<V> emptyResponseBuilder;
-    private final Set<ShardId> failedShards;
     private final Consumer<ShardId> handleFailedShard;
 
     public ShardBatchCache(
         Logger logger,
         String type,
-        Map<ShardId, ShardAttributes> shardToCustomDataPath,
+        Map<ShardId, ShardAttributes> shardAttributesMap,
         String logKey,
         Class<V> clazz,
         BiFunction<DiscoveryNode, Map<ShardId, V>, T> responseGetter,
@@ -64,13 +63,12 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
         Consumer<ShardId> handleFailedShard
     ) {
         super(logger, logKey, type);
-        this.batchSize = shardToCustomDataPath.size();
-        fillShardIdKeys(shardToCustomDataPath.keySet());
+        this.batchSize = shardAttributesMap.size();
+        fillShardIdKeys(shardAttributesMap.keySet());
         this.shardResponseClass = clazz;
         this.responseConstructor = responseGetter;
         this.shardsBatchDataGetter = shardsBatchDataGetter;
         this.emptyResponseBuilder = emptyResponseBuilder;
-        failedShards = new HashSet<>();
         this.handleFailedShard = handleFailedShard;
     }
 
@@ -122,7 +120,7 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
     public void putData(DiscoveryNode node, T response) {
         NodeEntry<V> nodeEntry = cache.get(node.getId());
         Map<ShardId, V> batchResponse = shardsBatchDataGetter.apply(response);
-        failedShards.addAll(filterFailedShards(batchResponse));
+        filterFailedShards(batchResponse);
         nodeEntry.doneFetching(batchResponse, shardIdKey);
     }
 
@@ -132,9 +130,8 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
      * @param batchResponse response from one node for the batch.
      * @return List of failed shards.
      */
-    private List<ShardId> filterFailedShards(Map<ShardId, V> batchResponse) {
+    private void filterFailedShards(Map<ShardId, V> batchResponse) {
         logger.trace("filtering failed shards");
-        List<ShardId> failedShards = new ArrayList<>();
         for (Iterator<ShardId> it = batchResponse.keySet().iterator(); it.hasNext();) {
             ShardId shardId = it.next();
             if (batchResponse.get(shardId) != null) {
@@ -143,11 +140,8 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
                     // the batch
                     Exception shardException = batchResponse.get(shardId).getException();
                     // if the request got rejected or timed out, we need to try it again next time...
-                    if (shardException instanceof OpenSearchRejectedExecutionException
-                        || shardException instanceof ReceiveTimeoutTransportException
-                        || shardException instanceof OpenSearchTimeoutException) {
+                    if (retryableException(shardException)) {
                         logger.trace("got unhandled retryable exception for shard {} {}", shardId.toString(), shardException.toString());
-                        failedShards.add(shardId);
                         handleFailedShard.accept(shardId);
                         // remove this failed entry. So, while storing the data, we don't need to re-process it.
                         it.remove();
@@ -155,7 +149,6 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
                 }
             }
         }
-        return failedShards;
     }
 
     @Override

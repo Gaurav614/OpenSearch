@@ -60,7 +60,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> implements Node
      * Fills the shard fetched data with new (data) nodes and a fresh NodeEntry, and removes from
      * it nodes that are no longer part of the state.
      */
-    void fillShardCacheWithDataNodes(DiscoveryNodes nodes) {
+    void fillCacheWithDataNodes(DiscoveryNodes nodes) {
         // verify that all current data nodes are there
         for (final DiscoveryNode node : nodes.getDataNodes().values()) {
             if (getCache().containsKey(node.getId()) == false) {
