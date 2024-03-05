@@ -49,19 +49,13 @@ public class ShardCache<K extends BaseNodeResponse> extends BaseShardCache<K> {
     }
 
     @Override
-    public List<ShardId> getFailedShards() {
-        // Single shard cache does not need to return that shard itself because handleFailure will take care of it
-        return Collections.emptyList();
-    }
-
-    @Override
     public Map<String, ? extends BaseNodeEntry> getCache() {
         return cache;
     }
 
     @Override
-    public void clearShardCache(ShardId shardId) {
-        cache.clear();
+    public void deleteData(ShardId shardId) {
+        cache.clear(); // single shard cache can clear the full map
     }
 
     /**

@@ -80,7 +80,7 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
     }
 
     @Override
-    public void clearShardCache(ShardId shardId) {
+    public void deleteData(ShardId shardId) {
         if (shardIdKey.containsKey(shardId)) {
             Integer shardIdIndex = shardIdKey.remove(shardId);
             for (String nodeId : cache.keySet()) {
@@ -163,13 +163,6 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
         return this.responseConstructor.apply(node, getBatchData(cache.get(node.getId())));
     }
 
-    @Override
-    public List<ShardId> getFailedShards() {
-        List<ShardId> defectedShards = List.copyOf(failedShards);
-        failedShards.clear();
-        return defectedShards;
-    }
-
     private HashMap<ShardId, V> getBatchData(NodeEntry<V> nodeEntry) {
         V[] nodeShardEntries = nodeEntry.getData();
         boolean[] emptyResponses = nodeEntry.getEmptyShardResponse();
@@ -191,7 +184,7 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
         }
         this.shardIdKey.keySet().removeIf(shardId -> {
             if (!shardIds.contains(shardId)) {
-                clearShardCache(shardId);
+                deleteData(shardId);
                 return true;
             } else {
                 return false;

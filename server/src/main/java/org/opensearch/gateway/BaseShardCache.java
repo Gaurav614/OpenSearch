@@ -17,7 +17,6 @@ import org.opensearch.action.support.nodes.BaseNodeResponse;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.transport.ReceiveTimeoutTransportException;
 
 import java.util.ArrayList;
@@ -28,52 +27,21 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Common functionalities of a cache for storing shard metadata.
+ * Common functionalities of a cache for storing shard metadata. Cache maintains node level responses.
+ * Setting up the cache is required from implementation class.
+ *
  * @param <K> Response type of transport action which has the data to be stored in the cache.
  */
-public abstract class BaseShardCache<K extends BaseNodeResponse> {
+public abstract class BaseShardCache<K extends BaseNodeResponse> implements NodeCache<K> {
     final Logger logger;
-    final String logKey;
-    final String type;
+    private final String logKey;
+    private final String type;
 
     protected BaseShardCache(Logger logger, String logKey, String type) {
         this.logger = logger;
         this.logKey = logKey;
         this.type = type;
     }
-
-    /**
-     * Initialize cache's entry for a node.
-     *
-     * @param node for which node we need to initialize the cache.
-     */
-    public abstract void initData(DiscoveryNode node);
-
-    /**
-     * Store the response in the cache from node.
-     *
-     * @param node     node from which we got the response.
-     * @param response shard metadata coming from node.
-     */
-    public abstract void putData(DiscoveryNode node, K response);
-
-    /**
-     * Get the response from cache for a node.
-     *
-     * @param node node for which we need the response.
-     * @return actual response.
-     */
-    public abstract K getData(DiscoveryNode node);
-
-    /**
-     * Provide the list of shards which got failures, these shards should be removed
-     * @return list of failed shards
-     */
-    public abstract List<ShardId> getFailedShards();
-
-    public abstract Map<String, ? extends BaseNodeEntry> getCache();
-
-    public abstract void clearShardCache(ShardId shardId);
 
     /**
      * Returns the number of fetches that are currently ongoing.
@@ -92,7 +60,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
      * Fills the shard fetched data with new (data) nodes and a fresh NodeEntry, and removes from
      * it nodes that are no longer part of the state.
      */
-    void fillCacheWithDataNodes(DiscoveryNodes nodes) {
+    void fillShardCacheWithDataNodes(DiscoveryNodes nodes) {
         // verify that all current data nodes are there
         for (final DiscoveryNode node : nodes.getDataNodes().values()) {
             if (getCache().containsKey(node.getId()) == false) {
@@ -208,9 +176,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
             // if the entry is there, for the right fetching round and not marked as failed already, process it
             Throwable unwrappedCause = ExceptionsHelper.unwrapCause(failure.getCause());
             // if the request got rejected or timed out, we need to try it again next time...
-            if (unwrappedCause instanceof OpenSearchRejectedExecutionException
-                || unwrappedCause instanceof ReceiveTimeoutTransportException
-                || unwrappedCause instanceof OpenSearchTimeoutException) {
+            if (retryableException(unwrappedCause)) {
                 nodeEntry.restartFetching();
             } else {
                 logger.warn(
@@ -220,6 +186,12 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
                 nodeEntry.doneFetching(failure.getCause());
             }
         }
+    }
+
+    boolean retryableException(Throwable unwrappedCause) {
+        return unwrappedCause instanceof OpenSearchRejectedExecutionException
+            || unwrappedCause instanceof ReceiveTimeoutTransportException
+            || unwrappedCause instanceof OpenSearchTimeoutException;
     }
 
     void processFailures(List<FailedNodeException> failures, long fetchingRound) {
@@ -232,6 +204,11 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
         }
     }
 
+    /**
+     * Common function for removing whole node entry.
+     *
+     * @param nodeId nodeId to be cleaned.
+     */
     void remove(String nodeId) {
         this.getCache().remove(nodeId);
     }
