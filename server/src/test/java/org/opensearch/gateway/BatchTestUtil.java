@@ -10,12 +10,12 @@ package org.opensearch.gateway;
 
 import org.opensearch.core.index.shard.ShardId;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 public class BatchTestUtil {
-    public static Set<ShardId> setUpShards(int numberOfShards) {
-        Set<ShardId> shards = new HashSet<>();
+    public static List<ShardId> setUpShards(int numberOfShards) {
+        List<ShardId> shards = new ArrayList<>();
         for (int shardNumber = 0; shardNumber < numberOfShards; shardNumber++) {
             ShardId shardId = new ShardId("test", "_na_", shardNumber);
             shards.add(shardId);

@@ -12,7 +12,6 @@ import org.opensearch.common.Nullable;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.shard.ShardId;
 
 import java.io.IOException;
 
@@ -22,22 +21,15 @@ import java.io.IOException;
  * @opensearch.internal
  */
 public class ShardAttributes implements Writeable {
-    private final ShardId shardId;
     @Nullable
     private final String customDataPath;
 
-    public ShardAttributes(ShardId shardId, String customDataPath) {
-        this.shardId = shardId;
+    public ShardAttributes(String customDataPath) {
         this.customDataPath = customDataPath;
     }
 
     public ShardAttributes(StreamInput in) throws IOException {
-        shardId = new ShardId(in);
         customDataPath = in.readString();
-    }
-
-    public ShardId getShardId() {
-        return shardId;
     }
 
     /**
@@ -51,12 +43,11 @@ public class ShardAttributes implements Writeable {
     }
 
     public void writeTo(StreamOutput out) throws IOException {
-        shardId.writeTo(out);
         out.writeString(customDataPath);
     }
 
     @Override
     public String toString() {
-        return "ShardAttributes{" + "shardId=" + shardId + ", customDataPath='" + customDataPath + '\'' + '}';
+        return "ShardAttributes{" + ", customDataPath='" + customDataPath + '\'' + '}';
     }
 }

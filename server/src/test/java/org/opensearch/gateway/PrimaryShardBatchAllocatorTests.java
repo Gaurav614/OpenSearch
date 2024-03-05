@@ -49,7 +49,7 @@ import static org.opensearch.cluster.routing.UnassignedInfo.Reason.CLUSTER_RECOV
 public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCase {
 
     private final ShardId shardId = new ShardId("test", "_na_", 0);
-    private static Set<ShardId> shardsInBatch;
+    private static List<ShardId> shardsInBatch;
     private final DiscoveryNode node1 = newNode("node1");
     private final DiscoveryNode node2 = newNode("node2");
     private final DiscoveryNode node3 = newNode("node3");

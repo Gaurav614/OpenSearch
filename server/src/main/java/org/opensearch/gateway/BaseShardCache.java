@@ -136,7 +136,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> {
      * @param failedNodes return failedNodes with the nodes where fetch has failed.
      * @return Map of cache data for every DiscoveryNode.
      */
-     Map<DiscoveryNode, K> getCacheData(DiscoveryNodes nodes, Set<String> failedNodes) {
+    Map<DiscoveryNode, K> getCacheData(DiscoveryNodes nodes, Set<String> failedNodes) {
         Map<DiscoveryNode, K> fetchData = new HashMap<>();
         for (Iterator<? extends Map.Entry<String, ? extends BaseNodeEntry>> it = getCache().entrySet().iterator(); it.hasNext();) {
             Map.Entry<String, BaseNodeEntry> entry = (Map.Entry<String, BaseNodeEntry>) it.next();

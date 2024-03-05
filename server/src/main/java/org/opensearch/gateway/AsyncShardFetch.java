@@ -94,7 +94,7 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
         this.logger = logger;
         this.type = type;
         shardAttributesMap = new HashMap<>();
-        shardAttributesMap.put(shardId, new ShardAttributes(shardId, customDataPath));
+        shardAttributesMap.put(shardId, new ShardAttributes(customDataPath));
         this.action = (Lister<BaseNodesResponse<T>, T>) action;
         this.reroutingKey = "ShardId=[" + shardId.toString() + "]";
         this.shardCache = new ShardCache<T>(logger, reroutingKey, type);

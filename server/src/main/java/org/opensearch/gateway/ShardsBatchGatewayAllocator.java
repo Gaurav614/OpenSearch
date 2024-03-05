@@ -261,7 +261,6 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
             if (batchSize > 0) {
                 ShardEntry shardEntry = new ShardEntry(
                     new ShardAttributes(
-                        currentShard.shardId(),
                         IndexMetadata.INDEX_DATA_PATH_SETTING.get(allocation.metadata().index(currentShard.index()).getSettings())
                     ),
                     currentShard
@@ -705,7 +704,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
     /**
      * Holds information about a shard to be allocated in a batch.
      */
-    public class ShardEntry {
+    public static class ShardEntry {
 
         private final ShardAttributes shardAttributes;
 
