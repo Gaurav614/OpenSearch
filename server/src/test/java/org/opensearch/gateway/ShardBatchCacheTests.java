@@ -30,7 +30,7 @@ public class ShardBatchCacheTests extends OpenSearchAllocationTestCase {
     private final DiscoveryNode node1 = newNode("node1");
     private final DiscoveryNode node2 = newNode("node2");
     private final Map<ShardId, ShardsBatchGatewayAllocator.ShardEntry> batchInfo = new HashMap<>();
-    private ShardBatchCache<NodeGatewayStartedShardsBatch, NodeGatewayStartedShard> shardCache;
+    private AsyncShardBatchFetch.ShardBatchCache<NodeGatewayStartedShardsBatch, NodeGatewayStartedShard> shardCache;
     private List<ShardId> shardsInBatch = new ArrayList<>();
     private static final int NUMBER_OF_SHARDS_DEFAULT = 10;
 
@@ -44,7 +44,7 @@ public class ShardBatchCacheTests extends OpenSearchAllocationTestCase {
     public void setupShardBatchCache(String batchId, int numberOfShards) {
         Map<ShardId, ShardAttributes> shardAttributesMap = new HashMap<>();
         fillShards(shardAttributesMap, numberOfShards);
-        this.shardCache = new ShardBatchCache<>(
+        this.shardCache = new AsyncShardBatchFetch.ShardBatchCache<>(
             logger,
             "batch_shards_started",
             shardAttributesMap,
@@ -69,7 +69,7 @@ public class ShardBatchCacheTests extends OpenSearchAllocationTestCase {
                 .getNodeGatewayStartedShardsBatch()
                 .containsKey(shard)
         );
-        this.shardCache.deleteData(shard);
+        this.shardCache.deleteShard(shard);
         assertFalse(
             this.shardCache.getCacheData(DiscoveryNodes.builder().add(node1).build(), null)
                 .get(node1)
@@ -84,8 +84,7 @@ public class ShardBatchCacheTests extends OpenSearchAllocationTestCase {
         this.shardCache.initData(node1);
         this.shardCache.initData(node2);
         this.shardCache.markAsFetching(List.of(node1.getId(), node2.getId()), 1);
-        this.shardCache.putData(node1, new NodeGatewayStartedShardsBatch(node1, getPrimaryResponse(shardsInBatch,
-            ResponseType.EMPTY)));
+        this.shardCache.putData(node1, new NodeGatewayStartedShardsBatch(node1, getPrimaryResponse(shardsInBatch, ResponseType.EMPTY)));
         assertTrue(
             this.shardCache.getCacheData(DiscoveryNodes.builder().add(node1).build(), null)
                 .get(node1)
@@ -117,8 +116,7 @@ public class ShardBatchCacheTests extends OpenSearchAllocationTestCase {
         this.shardCache.initData(node1);
         this.shardCache.initData(node2);
         this.shardCache.markAsFetching(List.of(node1.getId(), node2.getId()), 1);
-        this.shardCache.putData(node1, new NodeGatewayStartedShardsBatch(node1, getPrimaryResponse(shardsInBatch,
-            ResponseType.VALID)));
+        this.shardCache.putData(node1, new NodeGatewayStartedShardsBatch(node1, getPrimaryResponse(shardsInBatch, ResponseType.VALID)));
         this.shardCache.putData(node2, new NodeGatewayStartedShardsBatch(node1, getPrimaryResponse(shardsInBatch, ResponseType.EMPTY)));
 
         Map<DiscoveryNode, NodeGatewayStartedShardsBatch> fetchData = shardCache.getCacheData(
@@ -140,11 +138,12 @@ public class ShardBatchCacheTests extends OpenSearchAllocationTestCase {
         setupShardBatchCache(BATCH_ID, NUMBER_OF_SHARDS_DEFAULT);
         this.shardCache.initData(node1);
         this.shardCache.markAsFetching(List.of(node1.getId()), 1);
-        this.shardCache.putData(node1, new NodeGatewayStartedShardsBatch(node1, getPrimaryResponse(shardsInBatch,
-            ResponseType.NULL)));
+        this.shardCache.putData(node1, new NodeGatewayStartedShardsBatch(node1, getPrimaryResponse(shardsInBatch, ResponseType.NULL)));
 
         Map<DiscoveryNode, NodeGatewayStartedShardsBatch> fetchData = shardCache.getCacheData(
-            DiscoveryNodes.builder().add(node1).build(), null);
+            DiscoveryNodes.builder().add(node1).build(),
+            null
+        );
         assertTrue(fetchData.get(node1).getNodeGatewayStartedShardsBatch().isEmpty());
     }
 
@@ -153,10 +152,11 @@ public class ShardBatchCacheTests extends OpenSearchAllocationTestCase {
         this.shardCache.initData(node1);
         this.shardCache.initData(node2);
         this.shardCache.markAsFetching(List.of(node1.getId(), node2.getId()), 1);
-        this.shardCache.putData(node1, new NodeGatewayStartedShardsBatch(node1,
-            getFailedPrimaryResponse(shardsInBatch, 5)));
+        this.shardCache.putData(node1, new NodeGatewayStartedShardsBatch(node1, getFailedPrimaryResponse(shardsInBatch, 5)));
         Map<DiscoveryNode, NodeGatewayStartedShardsBatch> fetchData = shardCache.getCacheData(
-            DiscoveryNodes.builder().add(node1).add(node2).build(), null);
+            DiscoveryNodes.builder().add(node1).add(node2).build(),
+            null
+        );
 
         assertEquals(5, batchInfo.size());
         assertEquals(2, fetchData.size());
@@ -185,17 +185,17 @@ public class ShardBatchCacheTests extends OpenSearchAllocationTestCase {
         return shardData;
     }
 
-    private Map<ShardId, NodeGatewayStartedShard> getFailedPrimaryResponse(List<ShardId> shards,
-                                                                           int failedShardsCount) {
+    private Map<ShardId, NodeGatewayStartedShard> getFailedPrimaryResponse(List<ShardId> shards, int failedShardsCount) {
         int allocationId = 1;
         Map<ShardId, NodeGatewayStartedShard> shardData = new HashMap<>();
         for (ShardId shard : shards) {
             if (failedShardsCount-- > 0) {
-                shardData.put(shard, new NodeGatewayStartedShard("alloc-" + allocationId++, false, null,
-                    new OpenSearchRejectedExecutionException()));
+                shardData.put(
+                    shard,
+                    new NodeGatewayStartedShard("alloc-" + allocationId++, false, null, new OpenSearchRejectedExecutionException())
+                );
             } else {
-                shardData.put(shard, new NodeGatewayStartedShard("alloc-" + allocationId++, false, null,
-                    null));
+                shardData.put(shard, new NodeGatewayStartedShard("alloc-" + allocationId++, false, null, null));
             }
         }
         return shardData;

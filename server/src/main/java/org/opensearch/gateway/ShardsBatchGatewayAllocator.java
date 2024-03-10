@@ -708,11 +708,6 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
 
         private final ShardAttributes shardAttributes;
 
-        public ShardEntry setShardRouting(ShardRouting shardRouting) {
-            this.shardRouting = shardRouting;
-            return this;
-        }
-
         private ShardRouting shardRouting;
 
         public ShardEntry(ShardAttributes shardAttributes, ShardRouting shardRouting) {
@@ -726,6 +721,11 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
 
         public ShardAttributes getShardAttributes() {
             return shardAttributes;
+        }
+
+        public ShardEntry setShardRouting(ShardRouting shardRouting) {
+            this.shardRouting = shardRouting;
+            return this;
         }
     }
 

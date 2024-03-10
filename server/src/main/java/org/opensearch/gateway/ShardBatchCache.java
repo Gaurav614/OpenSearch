@@ -9,22 +9,17 @@
 package org.opensearch.gateway;
 
 import org.apache.logging.log4j.Logger;
-import org.opensearch.OpenSearchTimeoutException;
 import org.opensearch.action.support.nodes.BaseNodeResponse;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.common.Nullable;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+import org.opensearch.common.logging.Loggers;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.indices.store.ShardAttributes;
-import org.opensearch.transport.ReceiveTimeoutTransportException;
 
 import java.lang.reflect.Array;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -39,7 +34,7 @@ import java.util.function.Supplier;
  * @param <T> Response type of transport action.
  * @param <V> Data type of shard level response.
  */
-public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResponse> extends BaseShardCache<T> {
+public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResponse> extends AsyncShardFetchCache<T> {
     private final Map<String, NodeEntry<V>> cache = new HashMap<>();
     private final Map<ShardId, Integer> shardIdKey = new HashMap<>();
     private final AtomicInteger shardIdIndex = new AtomicInteger();
@@ -62,7 +57,7 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
         Supplier<V> emptyResponseBuilder,
         Consumer<ShardId> handleFailedShard
     ) {
-        super(logger, logKey, type);
+        super(Loggers.getLogger(logger, "_" + logKey), type);
         this.batchSize = shardAttributesMap.size();
         fillShardIdKeys(shardAttributesMap.keySet());
         this.shardResponseClass = clazz;
@@ -78,7 +73,7 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
     }
 
     @Override
-    public void deleteData(ShardId shardId) {
+    public void deleteShard(ShardId shardId) {
         if (shardIdKey.containsKey(shardId)) {
             Integer shardIdIndex = shardIdKey.remove(shardId);
             for (String nodeId : cache.keySet()) {
@@ -128,7 +123,6 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
      * Return the shard for which we got unhandled exceptions.
      *
      * @param batchResponse response from one node for the batch.
-     * @return List of failed shards.
      */
     private void filterFailedShards(Map<ShardId, V> batchResponse) {
         logger.trace("filtering failed shards");
@@ -177,7 +171,7 @@ public class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResp
         }
         this.shardIdKey.keySet().removeIf(shardId -> {
             if (!shardIds.contains(shardId)) {
-                deleteData(shardId);
+                deleteShard(shardId);
                 return true;
             } else {
                 return false;

@@ -38,10 +38,13 @@ import org.opensearch.action.support.nodes.BaseNodesResponse;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.cluster.routing.allocation.RoutingAllocation;
+import org.opensearch.common.Nullable;
 import org.opensearch.common.lease.Releasable;
+import org.opensearch.common.logging.Loggers;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.indices.store.ShardAttributes;
+import org.opensearch.indices.store.TransportNodesListShardStoreMetadata;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -58,9 +61,8 @@ import static java.util.Collections.unmodifiableMap;
  * Allows to asynchronously fetch shard related data from other nodes for allocation, without blocking
  * the cluster update thread.
  * <p>
- * The async fetch logic maintains a map of which nodes are being fetched from in an async manner,
- * and once the results are back, it makes sure to schedule a reroute to make sure those results will
- * be taken into account.
+ * The async fetch logic maintains a cache {@link AsyncShardFetchCache} which is filled in async manner when nodes respond back.
+ * It also schedules a reroute to make sure those results will be taken into account.
  *
  * @opensearch.internal
  */
@@ -70,17 +72,18 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
      * An action that lists the relevant shard data that needs to be fetched.
      */
     public interface Lister<NodesResponse extends BaseNodesResponse<NodeResponse>, NodeResponse extends BaseNodeResponse> {
-        void list(Map<ShardId, ShardAttributes> shardIdsWithCustomDataPath, DiscoveryNode[] nodes, ActionListener<NodesResponse> listener);
+        void list(Map<ShardId, ShardAttributes> shardAttributesMap, DiscoveryNode[] nodes, ActionListener<NodesResponse> listener);
+
     }
 
     protected final Logger logger;
     protected final String type;
     protected final Map<ShardId, ShardAttributes> shardAttributesMap;
     private final Lister<BaseNodesResponse<T>, T> action;
-    protected BaseShardCache<T> shardCache;
+    protected AsyncShardFetchCache<T> cache;
     private final AtomicLong round = new AtomicLong();
     private boolean closed;
-    protected final String reroutingKey;
+    final String reroutingKey;
     private final Map<ShardId, Set<String>> shardToIgnoreNodes = new HashMap<>();
 
     @SuppressWarnings("unchecked")
@@ -97,51 +100,37 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
         shardAttributesMap.put(shardId, new ShardAttributes(customDataPath));
         this.action = (Lister<BaseNodesResponse<T>, T>) action;
         this.reroutingKey = "ShardId=[" + shardId.toString() + "]";
-        this.shardCache = new ShardCache<T>(logger, reroutingKey, type);
+        cache = new ShardCache<>(logger, reroutingKey, type);
     }
 
-    @SuppressWarnings("unchecked")
-    protected AsyncShardFetch(
-        Logger logger,
-        String type,
-        ShardId shardId,
-        ShardAttributes shardAttributes,
-        Lister<? extends BaseNodesResponse<T>, T> action
-    ) {
-        this.logger = logger;
-        this.type = type;
-        shardAttributesMap = new HashMap<>();
-        shardAttributesMap.put(shardId, shardAttributes);
-        this.action = (Lister<BaseNodesResponse<T>, T>) action;
-        this.reroutingKey = "ShardId=[" + shardId.toString() + "]";
-        this.shardCache = new ShardCache<T>(logger, reroutingKey, type);
-    }
-
+    /**
+     * Added to fetch a batch of shards from nodes
+     *
+     * @param logger             Logger
+     * @param type               type of action
+     * @param shardAttributesMap Map of {@link ShardId} to {@link ShardAttributes} to perform fetching on them a
+     * @param action             Transport Action
+     * @param batchId            For the given ShardAttributesMap, we expect them to tie with a single batch id for logging and later identification
+     */
     @SuppressWarnings("unchecked")
     protected AsyncShardFetch(
         Logger logger,
         String type,
         Map<ShardId, ShardAttributes> shardAttributesMap,
-        AsyncShardFetch.Lister<? extends BaseNodesResponse<T>, T> action,
+        Lister<? extends BaseNodesResponse<T>, T> action,
         String batchId
     ) {
         this.logger = logger;
         this.type = type;
         this.shardAttributesMap = shardAttributesMap;
-        this.action = (AsyncShardFetch.Lister<BaseNodesResponse<T>, T>) action;
+        this.action = (Lister<BaseNodesResponse<T>, T>) action;
         this.reroutingKey = "BatchID=[" + batchId + "]";
+        cache = new ShardCache<>(logger, reroutingKey, type);
     }
 
     @Override
     public synchronized void close() {
         this.closed = true;
-    }
-
-    /**
-     * Returns the number of async fetches that are currently ongoing.
-     */
-    public synchronized int getNumberOfInFlightFetches() {
-        return shardCache.getInflightFetches();
     }
 
     /**
@@ -177,24 +166,24 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
             shardToIgnoreNodes.put(ignoreNodesEntry.getKey(), ignoreNodesSet);
         }
 
-        shardCache.fillCacheWithDataNodes(nodes);
-        List<String> nodeIds = shardCache.findNodesToFetch();
+        cache.fillShardCacheWithDataNodes(nodes);
+        List<String> nodeIds = cache.findNodesToFetch();
         if (nodeIds.isEmpty() == false) {
             // mark all node as fetching and go ahead and async fetch them
             // use a unique round id to detect stale responses in processAsyncFetch
             final long fetchingRound = round.incrementAndGet();
-            shardCache.markAsFetching(nodeIds, fetchingRound);
+            cache.markAsFetching(nodeIds, fetchingRound);
             DiscoveryNode[] discoNodesToFetch = nodeIds.stream().map(nodes::get).toArray(DiscoveryNode[]::new);
             asyncFetch(discoNodesToFetch, fetchingRound);
         }
 
         // if we are still fetching, return null to indicate it
-        if (shardCache.hasAnyNodeFetching()) {
+        if (cache.hasAnyNodeFetching()) {
             return new FetchResult<>(null, emptyMap());
         } else {
             // nothing to fetch, yay, build the return value
             Set<String> failedNodes = new HashSet<>();
-            Map<DiscoveryNode, T> fetchData = shardCache.getCacheData(nodes, failedNodes);
+            Map<DiscoveryNode, T> fetchData = cache.getCacheData(nodes, failedNodes);
 
             Map<ShardId, Set<String>> allIgnoreNodesMap = unmodifiableMap(new HashMap<>(shardToIgnoreNodes));
             // clear the nodes to ignore, we had a successful run in fetching everything we can
@@ -202,6 +191,7 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
             shardToIgnoreNodes.clear();
             // if at least one node failed, make sure to have a protective reroute
             // here, just case this round won't find anything, and we need to retry fetching data
+
             if (failedNodes.isEmpty() == false
                 || allIgnoreNodesMap.values().stream().anyMatch(ignoreNodeSet -> ignoreNodeSet.isEmpty() == false)) {
                 reroute(
@@ -233,24 +223,28 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
         logger.trace("{} processing fetched [{}] results", reroutingKey, type);
 
         if (responses != null) {
-            shardCache.processResponses(responses, fetchingRound);
+            cache.processResponses(responses, fetchingRound);
         }
         if (failures != null) {
-            shardCache.processFailures(failures, fetchingRound);
+            cache.processFailures(failures, fetchingRound);
         }
         reroute(reroutingKey, "post_response");
+    }
+
+    public synchronized int getNumberOfInFlightFetches() {
+        return cache.getInflightFetches();
     }
 
     /**
      * Implement this in order to scheduled another round that causes a call to fetch data.
      */
-    protected abstract void reroute(String logKey, String reason);
+    protected abstract void reroute(String reroutingKey, String reason);
 
     /**
      * Clear cache for node, ensuring next fetch will fetch a fresh copy.
      */
     synchronized void clearCacheForNode(String nodeId) {
-        shardCache.remove(nodeId);
+        cache.remove(nodeId);
     }
 
     /**
@@ -277,10 +271,76 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
     }
 
     /**
+     * Cache implementation of transport actions returning single shard related data in the response.
+     * Store node level responses of transport actions like {@link TransportNodesListGatewayStartedShards} or
+     * {@link TransportNodesListShardStoreMetadata}.
+     *
+     * @param <K> Response type of transport action.
+     */
+    static class ShardCache<K extends BaseNodeResponse> extends AsyncShardFetchCache<K> {
+
+        private final Map<String, NodeEntry<K>> cache;
+
+        public ShardCache(Logger logger, String logKey, String type) {
+            super(Loggers.getLogger(logger, "_" + logKey), type);
+            cache = new HashMap<>();
+        }
+
+        @Override
+        public void initData(DiscoveryNode node) {
+            cache.put(node.getId(), new NodeEntry<>(node.getId()));
+        }
+
+        @Override
+        public void putData(DiscoveryNode node, K response) {
+            cache.get(node.getId()).doneFetching(response);
+        }
+
+        @Override
+        public K getData(DiscoveryNode node) {
+            return cache.get(node.getId()).getValue();
+        }
+
+        @Override
+        public Map<String, ? extends BaseNodeEntry> getCache() {
+            return cache;
+        }
+
+        @Override
+        public void deleteShard(ShardId shardId) {
+            cache.clear(); // single shard cache can clear the full map
+        }
+
+        /**
+         * A node entry, holding the state of the fetched data for a specific shard
+         * for a giving node.
+         */
+        static class NodeEntry<U extends BaseNodeResponse> extends AsyncShardFetchCache.BaseNodeEntry {
+            @Nullable
+            private U value;
+
+            void doneFetching(U value) {
+                super.doneFetching();
+                this.value = value;
+            }
+
+            NodeEntry(String nodeId) {
+                super(nodeId);
+            }
+
+            U getValue() {
+                return value;
+            }
+
+        }
+    }
+
+    /**
      * The result of a fetch operation. Make sure to first check {@link #hasData()} before
      * fetching the actual data.
      */
     public static class FetchResult<T extends BaseNodeResponse> {
+
         private final Map<DiscoveryNode, T> data;
         private final Map<ShardId, Set<String>> ignoredShardToNodes;
 

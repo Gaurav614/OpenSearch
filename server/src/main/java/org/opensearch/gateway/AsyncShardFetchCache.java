@@ -17,6 +17,7 @@ import org.opensearch.action.support.nodes.BaseNodeResponse;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.transport.ReceiveTimeoutTransportException;
 
 import java.util.ArrayList;
@@ -27,21 +28,47 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Common functionalities of a cache for storing shard metadata. Cache maintains node level responses.
- * Setting up the cache is required from implementation class.
+ * AsyncShardFetchCache will operate on the node level cache which is map of String and BaseNodeEntry. initData,
+ * putData and getData needs to be called for all the nodes. This class is responsible for managing the flow for all
+ * the nodes.
+ * It'll also give useful insights like how many ongoing fetches are happening, how many nodes are left for fetch or
+ * mark some node in fetching mode. All of these functionalities require checking the cache information and respond
+ * accordingly.
+ * <p>
+ * initData : how to initialize an entry of shard cache for a node.
+ * putData : how to store the response of transport action in the cache.
+ * getData : how to get the stored data for any shard allocators like {@link PrimaryShardAllocator} or
+ * {@link ReplicaShardAllocator}
+ * deleteShard : how to clean up the stored data from cache for a shard.
  *
  * @param <K> Response type of transport action which has the data to be stored in the cache.
+ *
+ * @opensearch.internal
  */
-public abstract class BaseShardCache<K extends BaseNodeResponse> implements NodeCache<K> {
+public abstract class AsyncShardFetchCache<K extends BaseNodeResponse> {
     final Logger logger;
-    private final String logKey;
     private final String type;
 
-    protected BaseShardCache(Logger logger, String logKey, String type) {
+    protected AsyncShardFetchCache(Logger logger, String type) {
         this.logger = logger;
-        this.logKey = logKey;
         this.type = type;
     }
+
+    abstract void initData(DiscoveryNode node);
+
+    abstract void putData(DiscoveryNode node, K response);
+
+    abstract K getData(DiscoveryNode node);
+
+    abstract Map<String, ? extends BaseNodeEntry> getCache();
+
+    /**
+     * Cleanup cached data for this shard once it's started. Cleanup only happens at shard level. Node entries will
+     * automatically be cleaned up once shards are assigned.
+     *
+     * @param shardId for which we need to free up the cached data.
+     */
+    abstract void deleteShard(ShardId shardId);
 
     /**
      * Returns the number of fetches that are currently ongoing.
@@ -60,7 +87,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> implements Node
      * Fills the shard fetched data with new (data) nodes and a fresh NodeEntry, and removes from
      * it nodes that are no longer part of the state.
      */
-    void fillCacheWithDataNodes(DiscoveryNodes nodes) {
+    void fillShardCacheWithDataNodes(DiscoveryNodes nodes) {
         // verify that all current data nodes are there
         for (final DiscoveryNode node : nodes.getDataNodes().values()) {
             if (getCache().containsKey(node.getId()) == false) {
@@ -100,7 +127,8 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> implements Node
     /**
      * Get the data from cache, ignore the failed entries. Use getData functional interface to get the data, as
      * different implementations may have different ways to populate the data from cache.
-     * @param nodes Discovery nodes for which we need to return the cache data.
+     *
+     * @param nodes       Discovery nodes for which we need to return the cache data.
      * @param failedNodes return failedNodes with the nodes where fetch has failed.
      * @return Map of cache data for every DiscoveryNode.
      */
@@ -135,19 +163,18 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> implements Node
             if (nodeEntry != null) {
                 if (validateNodeResponse(nodeEntry, fetchingRound)) {
                     // if the entry is there, for the right fetching round and not marked as failed already, process it
-                    logger.trace("{} marking {} as done for [{}], result is [{}]", logKey, nodeEntry.getNodeId(), type, response);
+                    logger.trace("marking {} as done for [{}], result is [{}]", nodeEntry.getNodeId(), type, response);
                     putData(response.getNode(), response);
                 }
             }
         }
     }
 
-    boolean validateNodeResponse(BaseNodeEntry nodeEntry, long fetchingRound) {
+    private boolean validateNodeResponse(BaseNodeEntry nodeEntry, long fetchingRound) {
         if (nodeEntry.getFetchingRound() != fetchingRound) {
             assert nodeEntry.getFetchingRound() > fetchingRound : "node entries only replaced by newer rounds";
             logger.trace(
-                "{} received response for [{}] from node {} for an older fetching round (expected: {} but was: {})",
-                logKey,
+                "received response for [{}] from node {} for an older fetching round (expected: {} but was: {})",
                 nodeEntry.getNodeId(),
                 type,
                 nodeEntry.getFetchingRound(),
@@ -155,18 +182,17 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> implements Node
             );
             return false;
         } else if (nodeEntry.isFailed()) {
-            logger.trace("{} node {} has failed for [{}] (failure [{}])", logKey, nodeEntry.getNodeId(), type, nodeEntry.getFailure());
+            logger.trace("node {} has failed for [{}] (failure [{}])", nodeEntry.getNodeId(), type, nodeEntry.getFailure());
             return false;
         }
         return true;
     }
 
-    void handleNodeFailure(BaseNodeEntry nodeEntry, FailedNodeException failure, long fetchingRound) {
+    private void handleNodeFailure(BaseNodeEntry nodeEntry, FailedNodeException failure, long fetchingRound) {
         if (nodeEntry.getFetchingRound() != fetchingRound) {
             assert nodeEntry.getFetchingRound() > fetchingRound : "node entries only replaced by newer rounds";
             logger.trace(
-                "{} received failure for [{}] from node {} for an older fetching round (expected: {} but was: {})",
-                logKey,
+                "received failure for [{}] from node {} for an older fetching round (expected: {} but was: {})",
                 nodeEntry.getNodeId(),
                 type,
                 nodeEntry.getFetchingRound(),
@@ -179,10 +205,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> implements Node
             if (retryableException(unwrappedCause)) {
                 nodeEntry.restartFetching();
             } else {
-                logger.warn(
-                    () -> new ParameterizedMessage("{}: failed to list shard for {} on node [{}]", logKey, type, failure.nodeId()),
-                    failure
-                );
+                logger.warn(() -> new ParameterizedMessage("failed to list shard for {} on node [{}]", type, failure.nodeId()), failure);
                 nodeEntry.doneFetching(failure.getCause());
             }
         }
@@ -196,7 +219,7 @@ public abstract class BaseShardCache<K extends BaseNodeResponse> implements Node
 
     void processFailures(List<FailedNodeException> failures, long fetchingRound) {
         for (FailedNodeException failure : failures) {
-            logger.trace("{} processing failure {} for [{}]", logKey, failure, type);
+            logger.trace("processing failure {} for [{}]", failure, type);
             BaseNodeEntry nodeEntry = getCache().get(failure.nodeId());
             if (nodeEntry != null) {
                 handleNodeFailure(nodeEntry, failure, fetchingRound);
