@@ -63,7 +63,6 @@ import java.util.stream.StreamSupport;
 public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
 
     public static final String ALLOCATOR_NAME = "shards_batch_gateway_allocator";
-
     private static final Logger logger = LogManager.getLogger(ShardsBatchGatewayAllocator.class);
     private final long maxBatchSize;
     private static final short DEFAULT_SHARD_BATCH_SIZE = 2000;
@@ -80,18 +79,15 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
     );
 
     private final RerouteService rerouteService;
-
-    private PrimaryShardBatchAllocator primaryShardBatchAllocator;
-    private ReplicaShardBatchAllocator replicaShardBatchAllocator;
-
+    private final PrimaryShardBatchAllocator primaryShardBatchAllocator;
+    private final ReplicaShardBatchAllocator replicaShardBatchAllocator;
     private Set<String> lastSeenEphemeralIds = Collections.emptySet();
 
-    // visble for testing
+    // visible for testing
     protected final ConcurrentMap<String, ShardsBatch> batchIdToStartedShardBatch = ConcurrentCollections.newConcurrentMap();
 
     // visible for testing
     protected final ConcurrentMap<String, ShardsBatch> batchIdToStoreShardBatch = ConcurrentCollections.newConcurrentMap();
-
     private final TransportNodesListGatewayStartedShardsBatch batchStartedAction;
     private final TransportNodesListShardStoreMetadataBatch batchStoreAction;
 
@@ -130,7 +126,6 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
         this.batchStoreAction = null;
         this.replicaShardBatchAllocator = null;
         this.maxBatchSize = DEFAULT_SHARD_BATCH_SIZE;
-        // this.batchMode = true;
     }
 
     // for tests
@@ -535,7 +530,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
             List<ShardRouting> inEligibleShards,
             RoutingAllocation allocation
         ) {
-            // get batch id for anyone given shard. We are assuming all shards will have same batch Id
+            // get batch id for anyone given shard. We are assuming all shards will have same batchId
             ShardRouting shardRouting = shardsEligibleForFetch.iterator().hasNext() ? shardsEligibleForFetch.iterator().next() : null;
             shardRouting = shardRouting == null && inEligibleShards.iterator().hasNext()
                 ? inEligibleShards.iterator().next()
@@ -587,7 +582,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
     /**
      * Holds information about a batch of shards to be allocated.
      * Async fetcher is used to fetch the data for the batch.
-     *
+     * <p>
      * Visible for testing
      */
     public class ShardsBatch {
@@ -682,7 +677,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
             if (this == o) {
                 return true;
             }
-            if (o == null || o instanceof ShardsBatch == false) {
+            if (o instanceof ShardsBatch == false) {
                 return false;
             }
             ShardsBatch shardsBatch = (ShardsBatch) o;

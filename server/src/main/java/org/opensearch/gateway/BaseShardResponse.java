@@ -19,9 +19,9 @@ import java.io.IOException;
  *
  * @opensearch.internal
  */
-public abstract class BaseShardResponse extends TransportResponse {
+public abstract class BaseShardResponse {
 
-    private Exception storeException;
+    private final Exception storeException;
 
     public BaseShardResponse(Exception storeException) {
         this.storeException = storeException;
@@ -34,7 +34,6 @@ public abstract class BaseShardResponse extends TransportResponse {
     }
 
     public BaseShardResponse(StreamInput in) throws IOException {
-        super(in);
         if (in.readBoolean()) {
             storeException = in.readException();
         } else {
@@ -42,7 +41,6 @@ public abstract class BaseShardResponse extends TransportResponse {
         }
     }
 
-    @Override
     public void writeTo(StreamOutput out) throws IOException {
         if (storeException != null) {
             out.writeBoolean(true);
