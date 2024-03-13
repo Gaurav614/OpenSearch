@@ -472,11 +472,11 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
         @Override
         @SuppressWarnings("unchecked")
         protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> fetchData(
-            List<ShardRouting> shardsEligibleForFetch,
+            List<ShardRouting> eligibleShards,
             List<ShardRouting> inEligibleShards,
             RoutingAllocation allocation
         ) {
-            ShardRouting shardRouting = shardsEligibleForFetch.iterator().hasNext() ? shardsEligibleForFetch.iterator().next() : null;
+            ShardRouting shardRouting = eligibleShards.iterator().hasNext() ? eligibleShards.iterator().next() : null;
             shardRouting = shardRouting == null && inEligibleShards.iterator().hasNext()
                 ? inEligibleShards.iterator().next()
                 : shardRouting;
@@ -498,7 +498,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
             // remove in eligible shards which allocator is not responsible for
             inEligibleShards.forEach(ShardsBatchGatewayAllocator.this::safelyRemoveShardFromBatch);
 
-            if (shardsBatch.getBatchedShards().isEmpty() && shardsEligibleForFetch.isEmpty()) {
+            if (shardsBatch.getBatchedShards().isEmpty() && eligibleShards.isEmpty()) {
                 logger.debug("Batch {} is empty", batchId);
                 return new AsyncShardFetch.FetchResult<>(null, Collections.emptyMap());
             }
@@ -526,12 +526,12 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
         @Override
         @SuppressWarnings("unchecked")
         protected AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> fetchData(
-            List<ShardRouting> shardsEligibleForFetch,
+            List<ShardRouting> eligibleShards,
             List<ShardRouting> inEligibleShards,
             RoutingAllocation allocation
         ) {
             // get batch id for anyone given shard. We are assuming all shards will have same batchId
-            ShardRouting shardRouting = shardsEligibleForFetch.iterator().hasNext() ? shardsEligibleForFetch.iterator().next() : null;
+            ShardRouting shardRouting = eligibleShards.iterator().hasNext() ? eligibleShards.iterator().next() : null;
             shardRouting = shardRouting == null && inEligibleShards.iterator().hasNext()
                 ? inEligibleShards.iterator().next()
                 : shardRouting;
@@ -553,7 +553,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
             // remove in eligible shards which allocator is not responsible for
             inEligibleShards.forEach(ShardsBatchGatewayAllocator.this::safelyRemoveShardFromBatch);
 
-            if (shardsBatch.getBatchedShards().isEmpty() && shardsEligibleForFetch.isEmpty()) {
+            if (shardsBatch.getBatchedShards().isEmpty() && eligibleShards.isEmpty()) {
                 logger.debug("Batch {} is empty", batchId);
                 return new AsyncShardFetch.FetchResult<>(null, Collections.emptyMap());
             }
@@ -699,7 +699,7 @@ public class ShardsBatchGatewayAllocator implements ExistingShardsAllocator {
     /**
      * Holds information about a shard to be allocated in a batch.
      */
-    public static class ShardEntry {
+    static class ShardEntry {
 
         private final ShardAttributes shardAttributes;
 

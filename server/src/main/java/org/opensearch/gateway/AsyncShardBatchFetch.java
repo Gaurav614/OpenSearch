@@ -57,10 +57,10 @@ public abstract class AsyncShardBatchFetch<T extends BaseNodeResponse, V extends
         BiFunction<DiscoveryNode, Map<ShardId, V>, T> responseGetter,
         Function<T, Map<ShardId, V>> shardsBatchDataGetter,
         Supplier<V> emptyResponseBuilder,
-        Consumer<ShardId> handleFailedShard
+        Consumer<ShardId> failedShardHandler
     ) {
         super(logger, type, shardAttributesMap, action, batchId);
-        this.removeShardFromBatch = handleFailedShard;
+        this.removeShardFromBatch = failedShardHandler;
         this.failedShards = new ArrayList<>();
         this.cache = new ShardBatchCache<>(
             logger,

@@ -37,7 +37,7 @@ public class TestShardBatchGatewayAllocator extends ShardsBatchGatewayAllocator 
     PrimaryShardBatchAllocator primaryBatchShardAllocator = new PrimaryShardBatchAllocator() {
         @Override
         protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch> fetchData(
-            List<ShardRouting> shardsEligibleForFetch,
+            List<ShardRouting> eligibleShards,
             List<ShardRouting> inEligibleShards,
             RoutingAllocation allocation
         ) {
@@ -48,7 +48,7 @@ public class TestShardBatchGatewayAllocator extends ShardsBatchGatewayAllocator 
                 Map<ShardId, ShardRouting> shardsOnNode = entry.getValue();
                 HashMap<ShardId, TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard> adaptedResponse = new HashMap<>();
 
-                for (ShardRouting shardRouting : shardsEligibleForFetch) {
+                for (ShardRouting shardRouting : eligibleShards) {
                     ShardId shardId = shardRouting.shardId();
                     Set<String> ignoreNodes = allocation.getIgnoreNodes(shardId);
 
@@ -79,7 +79,7 @@ public class TestShardBatchGatewayAllocator extends ShardsBatchGatewayAllocator 
 
         @Override
         protected AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadataBatch> fetchData(
-            List<ShardRouting> shardsEligibleForFetch,
+            List<ShardRouting> eligibleShards,
             List<ShardRouting> inEligibleShards,
             RoutingAllocation allocation
         ) {
