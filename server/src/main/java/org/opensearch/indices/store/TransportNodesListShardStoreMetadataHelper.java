@@ -48,7 +48,10 @@ import java.util.concurrent.TimeUnit;
  * @opensearch.internal
  */
 public class TransportNodesListShardStoreMetadataHelper {
-    public static StoreFilesMetadata getListShardMetadataOnLocalNode(
+
+    public static final String INDEX_NOT_FOUND = "node doesn't have meta data for index ";
+
+    public static StoreFilesMetadata listShardMetadataInternal(
         Logger logger,
         final ShardId shardId,
         NodeEnvironment nodeEnv,
@@ -93,7 +96,7 @@ public class TransportNodesListShardStoreMetadataHelper {
                         customDataPath = new IndexSettings(metadata, settings).customDataPath();
                     } else {
                         logger.trace("{} node doesn't have meta data for the requests index", shardId);
-                        throw new OpenSearchException("node doesn't have meta data for index " + shardId.getIndex());
+                        throw new OpenSearchException(INDEX_NOT_FOUND + shardId.getIndex());
                     }
                 }
             }

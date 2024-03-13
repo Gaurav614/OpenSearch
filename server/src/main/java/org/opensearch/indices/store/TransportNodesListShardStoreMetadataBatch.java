@@ -42,6 +42,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import static org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper.INDEX_NOT_FOUND;
+
 /**
  * Transport action for fetching the batch of shard stores Metadata from a list of transport nodes
  *
@@ -142,7 +144,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
         for (Map.Entry<ShardId, ShardAttributes> shardAttributes : request.getShardAttributes().entrySet()) {
             final ShardId shardId = shardAttributes.getKey();
             try {
-                StoreFilesMetadata storeFilesMetadata = TransportNodesListShardStoreMetadataHelper.getListShardMetadataOnLocalNode(
+                StoreFilesMetadata storeFilesMetadata = TransportNodesListShardStoreMetadataHelper.listShardMetadataInternal(
                     logger,
                     shardId,
                     nodeEnv,
@@ -153,10 +155,16 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
                 );
                 shardStoreMetadataMap.put(shardId, new NodeStoreFilesMetadata(storeFilesMetadata, null));
             } catch (IOException e) {
-                shardStoreMetadataMap.put(
-                    shardId,
-                    new NodeStoreFilesMetadata(new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList()), e)
-                );
+                // should return null in case of known exceptions being returned from listShardMetadataInternal method.
+                if (e.getMessage().contains(INDEX_NOT_FOUND)) {
+                    shardStoreMetadataMap.put(shardId, null);
+                } else {
+                    // return actual exception as it is for unknown exceptions
+                    shardStoreMetadataMap.put(
+                        shardId,
+                        new NodeStoreFilesMetadata(new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList()), e)
+                    );
+                }
             }
         }
         return shardStoreMetadataMap;
