@@ -13,7 +13,6 @@ import org.opensearch.action.support.nodes.BaseNodeResponse;
 import org.opensearch.action.support.nodes.BaseNodesResponse;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.common.Nullable;
 import org.opensearch.common.logging.Loggers;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.indices.store.ShardAttributes;
@@ -25,7 +24,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -40,6 +38,8 @@ import java.util.function.Supplier;
  *
  * @param <T> Response type of the transport action.
  * @param <V> Data type of shard level response.
+ *
+ * @opensearch.internal
  */
 public abstract class AsyncShardBatchFetch<T extends BaseNodeResponse, V extends BaseShardResponse> extends AsyncShardFetch<T> {
 
@@ -76,14 +76,27 @@ public abstract class AsyncShardBatchFetch<T extends BaseNodeResponse, V extends
     }
 
     public synchronized FetchResult<T> fetchData(DiscoveryNodes nodes, Map<ShardId, Set<String>> ignoreNodes) {
-        if (failedShards.isEmpty() == false) {
-            // trigger a reroute if there are any shards failed, to make sure they're picked up in next run
-            logger.trace("triggering another reroute for failed shards in {}", reroutingKey);
-            reroute("shards-failed", "shards failed in " + reroutingKey);
+        FetchResult<T> result = super.fetchData(nodes, ignoreNodes);
+        if (result.hasData()) {
+            // trigger reroute for failed shards only when all nodes have completed fetching
+            if (failedShards.isEmpty() == false) {
+                // trigger a reroute if there are any shards failed, to make sure they're picked up in next run
+                logger.trace("triggering another reroute for failed shards in {}", reroutingKey);
+                reroute("shards-failed", "shards failed in " + reroutingKey);
+                failedShards.clear();
+            }
         }
-        return super.fetchData(nodes, ignoreNodes);
+        return result;
     }
 
+    /**
+     * Remove the shard from shardAttributesMap so it's not sent in next asyncFetch.
+     * Call removeShardFromBatch method to remove the shardId from the batch object created in
+     * ShardsBatchGatewayAllocator.
+     * Add shardId to failedShards, so it can be used to trigger another reroute as part of upcoming fetchData call.
+     *
+     * @param shardId shardId to be cleaned up from batch and cache.
+     */
     private void cleanUpFailedShards(ShardId shardId) {
         shardAttributesMap.remove(shardId);
         removeShardFromBatch.accept(shardId);
@@ -108,16 +121,16 @@ public abstract class AsyncShardBatchFetch<T extends BaseNodeResponse, V extends
      * @param <V> Data type of shard level response.
      */
     public static class ShardBatchCache<T extends BaseNodeResponse, V extends BaseShardResponse> extends AsyncShardFetchCache<T> {
-        private final Map<String, NodeEntry<V>> cache = new HashMap<>();
-        private final Map<ShardId, Integer> shardIdKey = new HashMap<>();
-        private final AtomicInteger shardIdIndex = new AtomicInteger();
+        private final Map<String, NodeEntry<V>> cache;
+        private final Map<ShardId, Integer> shardIdToArray;
         private final int batchSize;
         private final Class<V> shardResponseClass;
         private final BiFunction<DiscoveryNode, Map<ShardId, V>, T> responseConstructor;
-        private final Map<Integer, ShardId> shardIdReverseKey = new HashMap<>();
+        private final Map<Integer, ShardId> arrayToShardId;
         private final Function<T, Map<ShardId, V>> shardsBatchDataGetter;
         private final Supplier<V> emptyResponseBuilder;
         private final Consumer<ShardId> handleFailedShard;
+        private final Logger logger;
 
         public ShardBatchCache(
             Logger logger,
@@ -132,12 +145,16 @@ public abstract class AsyncShardBatchFetch<T extends BaseNodeResponse, V extends
         ) {
             super(Loggers.getLogger(logger, "_" + logKey), type);
             this.batchSize = shardAttributesMap.size();
+            cache = new HashMap<>();
+            shardIdToArray = new HashMap<>();
+            arrayToShardId = new HashMap<>();
             fillShardIdKeys(shardAttributesMap.keySet());
             this.shardResponseClass = clazz;
             this.responseConstructor = responseGetter;
             this.shardsBatchDataGetter = shardsBatchDataGetter;
             this.emptyResponseBuilder = emptyResponseBuilder;
             this.handleFailedShard = handleFailedShard;
+            this.logger = logger;
         }
 
         @Override
@@ -147,8 +164,8 @@ public abstract class AsyncShardBatchFetch<T extends BaseNodeResponse, V extends
 
         @Override
         public void deleteShard(ShardId shardId) {
-            if (shardIdKey.containsKey(shardId)) {
-                Integer shardIdIndex = shardIdKey.remove(shardId);
+            if (shardIdToArray.containsKey(shardId)) {
+                Integer shardIdIndex = shardIdToArray.remove(shardId);
                 for (String nodeId : cache.keySet()) {
                     cache.get(nodeId).clearShard(shardIdIndex);
                 }
@@ -166,9 +183,9 @@ public abstract class AsyncShardBatchFetch<T extends BaseNodeResponse, V extends
          * PrimaryShardBatchAllocator or ReplicaShardBatchAllocator are looking for.
          */
         private void refreshReverseIdMap() {
-            shardIdReverseKey.clear();
-            for (ShardId shardId : shardIdKey.keySet()) {
-                shardIdReverseKey.putIfAbsent(shardIdKey.get(shardId), shardId);
+            arrayToShardId.clear();
+            for (ShardId shardId : shardIdToArray.keySet()) {
+                arrayToShardId.putIfAbsent(shardIdToArray.get(shardId), shardId);
             }
         }
 
@@ -190,7 +207,7 @@ public abstract class AsyncShardBatchFetch<T extends BaseNodeResponse, V extends
             NodeEntry<V> nodeEntry = cache.get(node.getId());
             Map<ShardId, V> batchResponse = shardsBatchDataGetter.apply(response);
             filterFailedShards(batchResponse);
-            nodeEntry.doneFetching(batchResponse, shardIdKey);
+            nodeEntry.doneFetching(batchResponse, shardIdToArray);
         }
 
         /**
@@ -232,22 +249,23 @@ public abstract class AsyncShardBatchFetch<T extends BaseNodeResponse, V extends
             V[] nodeShardEntries = nodeEntry.getData();
             boolean[] emptyResponses = nodeEntry.getEmptyShardResponse();
             HashMap<ShardId, V> shardData = new HashMap<>();
-            for (Integer shardIdIndex : shardIdKey.values()) {
+            for (Integer shardIdIndex : shardIdToArray.values()) {
                 if (emptyResponses[shardIdIndex]) {
-                    shardData.put(shardIdReverseKey.get(shardIdIndex), emptyResponseBuilder.get());
+                    shardData.put(arrayToShardId.get(shardIdIndex), emptyResponseBuilder.get());
                 } else if (nodeShardEntries[shardIdIndex] != null) {
                     // ignore null responses here
-                    shardData.put(shardIdReverseKey.get(shardIdIndex), nodeShardEntries[shardIdIndex]);
+                    shardData.put(arrayToShardId.get(shardIdIndex), nodeShardEntries[shardIdIndex]);
                 }
             }
             return shardData;
         }
 
         private void fillShardIdKeys(Set<ShardId> shardIds) {
+            int shardIdIndex = 0;
             for (ShardId shardId : shardIds) {
-                this.shardIdKey.putIfAbsent(shardId, shardIdIndex.getAndIncrement());
+                this.shardIdToArray.putIfAbsent(shardId, shardIdIndex++);
             }
-            this.shardIdKey.keySet().removeIf(shardId -> {
+            this.shardIdToArray.keySet().removeIf(shardId -> {
                 if (!shardIds.contains(shardId)) {
                     deleteShard(shardId);
                     return true;
@@ -262,7 +280,6 @@ public abstract class AsyncShardBatchFetch<T extends BaseNodeResponse, V extends
          * for a giving node.
          */
         static class NodeEntry<V extends BaseShardResponse> extends BaseNodeEntry {
-            @Nullable
             private final V[] shardData;
             private final boolean[] emptyShardResponse;
 

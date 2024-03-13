@@ -942,7 +942,8 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata nodeStoreFilesMetadata,
         ShardId shardId
     ) {
-        assertNotNull(nodeStoreFilesMetadata.getException());
+        // keeping the behaviour of index not found same as existing transport, it'll return empty result
+        assertNull(nodeStoreFilesMetadata.getException());
         TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata storeFileMetadata = nodeStoreFilesMetadata.storeFilesMetadata();
         assertEquals(shardId, storeFileMetadata.shardId());
         assertTrue(storeFileMetadata.peerRecoveryRetentionLeases().isEmpty());
