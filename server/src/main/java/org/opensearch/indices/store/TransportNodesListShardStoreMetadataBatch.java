@@ -162,7 +162,10 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
                     // return actual exception as it is for unknown exceptions
                     shardStoreMetadataMap.put(
                         shardId,
-                        new NodeStoreFilesMetadata(new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList()), e)
+                        new NodeStoreFilesMetadata(
+                            new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList()),
+                            e
+                        )
                     );
                 }
             }
