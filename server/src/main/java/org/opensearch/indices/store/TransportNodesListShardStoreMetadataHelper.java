@@ -78,10 +78,10 @@ public class TransportNodesListShardStoreMetadataHelper {
                         return storeFilesMetadata;
                     } catch (org.apache.lucene.index.IndexNotFoundException e) {
                         logger.trace(new ParameterizedMessage("[{}] node is missing index, responding with empty", shardId), e);
-                        throw e;
+                        return new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList());
                     } catch (IOException e) {
                         logger.warn(new ParameterizedMessage("[{}] can't read metadata from store, responding with empty", shardId), e);
-                        throw e;
+                        return new StoreFilesMetadata(shardId, Store.MetadataSnapshot.EMPTY, Collections.emptyList());
                     }
                 }
             }
