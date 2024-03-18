@@ -61,6 +61,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.opensearch.node.NodeRoleSettings.NODE_ROLES_SETTING;
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_NODE_ATTRIBUTE_KEY_PREFIX;
 
 /**
  * A discovery node represents a node that is part of the cluster.
@@ -461,6 +462,15 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     }
 
     /**
+     * Returns whether the node is a remote store node.
+     *
+     * @return true if the node contains remote store node attributes, false otherwise
+     */
+    public boolean isRemoteStoreNode() {
+        return this.getAttributes().keySet().stream().anyMatch(key -> key.startsWith(REMOTE_STORE_NODE_ATTRIBUTE_KEY_PREFIX));
+    }
+
+    /**
      * Returns a set of all the roles that the node has. The roles are returned in sorted order by the role name.
      * <p>
      * If a node does not have any specific role, the returned set is empty, which means that the node is a coordinating-only node.
@@ -521,7 +531,13 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
             sb.append('}');
         }
         if (!attributes.isEmpty()) {
-            sb.append(attributes);
+            sb.append(
+                attributes.entrySet()
+                    .stream()
+                    .filter(entry -> !entry.getKey().startsWith(REMOTE_STORE_NODE_ATTRIBUTE_KEY_PREFIX)) // filter remote_store attributes
+                                                                                                         // from logging to reduce noise.
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
+            );
         }
         return sb.toString();
     }

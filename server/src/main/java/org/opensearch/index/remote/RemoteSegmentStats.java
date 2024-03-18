@@ -8,7 +8,9 @@
 
 package org.opensearch.index.remote;
 
+import org.opensearch.Version;
 import org.opensearch.action.admin.cluster.remotestore.stats.RemoteStoreStats;
+import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
@@ -19,13 +21,15 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.shard.IndexShard;
 
 import java.io.IOException;
+import java.util.Objects;
 
 /**
  * Tracks remote store segment download and upload stats
  * Used for displaying remote store stats in IndicesStats/NodeStats API
  *
- * @opensearch.internal
+ * @opensearch.api
  */
+@PublicApi(since = "2.10.0")
 public class RemoteSegmentStats implements Writeable, ToXContentFragment {
     /**
      * Cumulative bytes attempted to be uploaded to remote store
@@ -74,6 +78,10 @@ public class RemoteSegmentStats implements Writeable, ToXContentFragment {
      * Total time spent in downloading segments from remote store
      */
     private long totalDownloadTime;
+    /**
+     * Total rejections due to remote store upload backpressure
+     */
+    private long totalRejections;
 
     public RemoteSegmentStats() {}
 
@@ -89,6 +97,9 @@ public class RemoteSegmentStats implements Writeable, ToXContentFragment {
         totalRefreshBytesLag = in.readLong();
         totalUploadTime = in.readLong();
         totalDownloadTime = in.readLong();
+        if (in.getVersion().onOrAfter(Version.V_2_12_0)) {
+            totalRejections = in.readVLong();
+        }
     }
 
     /**
@@ -114,6 +125,7 @@ public class RemoteSegmentStats implements Writeable, ToXContentFragment {
         this.totalRefreshBytesLag = trackerStats.bytesLag;
         this.totalUploadTime = trackerStats.totalUploadTimeInMs;
         this.totalDownloadTime = trackerStats.directoryFileTransferTrackerStats.totalTransferTimeInMs;
+        this.totalRejections = trackerStats.rejectionCount;
     }
 
     // Getter and setters. All are visible for testing
@@ -206,6 +218,14 @@ public class RemoteSegmentStats implements Writeable, ToXContentFragment {
         this.totalDownloadTime += totalDownloadTime;
     }
 
+    public long getTotalRejections() {
+        return totalRejections;
+    }
+
+    public void addTotalRejections(long totalRejections) {
+        this.totalRejections += totalRejections;
+    }
+
     /**
      * Adds existing stats. Used for stats roll-ups at index or node level
      *
@@ -224,6 +244,7 @@ public class RemoteSegmentStats implements Writeable, ToXContentFragment {
             this.totalRefreshBytesLag += existingStats.getTotalRefreshBytesLag();
             this.totalUploadTime += existingStats.getTotalUploadTime();
             this.totalDownloadTime += existingStats.getTotalDownloadTime();
+            this.totalRejections += existingStats.totalRejections;
         }
     }
 
@@ -240,18 +261,25 @@ public class RemoteSegmentStats implements Writeable, ToXContentFragment {
         out.writeLong(totalRefreshBytesLag);
         out.writeLong(totalUploadTime);
         out.writeLong(totalDownloadTime);
+        if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
+            out.writeVLong(totalRejections);
+        }
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject(Fields.REMOTE_STORE);
+
         builder.startObject(Fields.UPLOAD);
         buildUploadStats(builder);
-        builder.endObject();
+        builder.endObject(); // UPLOAD
+
         builder.startObject(Fields.DOWNLOAD);
         buildDownloadStats(builder);
-        builder.endObject();
-        builder.endObject();
+        builder.endObject(); // DOWNLOAD
+
+        builder.endObject(); // REMOTE_STORE
+
         return builder;
     }
 
@@ -260,13 +288,19 @@ public class RemoteSegmentStats implements Writeable, ToXContentFragment {
         builder.humanReadableField(Fields.STARTED_BYTES, Fields.STARTED, new ByteSizeValue(uploadBytesStarted));
         builder.humanReadableField(Fields.SUCCEEDED_BYTES, Fields.SUCCEEDED, new ByteSizeValue(uploadBytesSucceeded));
         builder.humanReadableField(Fields.FAILED_BYTES, Fields.FAILED, new ByteSizeValue(uploadBytesFailed));
-        builder.endObject();
+        builder.endObject(); // TOTAL_UPLOAD_SIZE
+
         builder.startObject(Fields.REFRESH_SIZE_LAG);
         builder.humanReadableField(Fields.TOTAL_BYTES, Fields.TOTAL, new ByteSizeValue(totalRefreshBytesLag));
         builder.humanReadableField(Fields.MAX_BYTES, Fields.MAX, new ByteSizeValue(maxRefreshBytesLag));
-        builder.endObject();
+        builder.endObject(); // REFRESH_SIZE_LAG
+
         builder.humanReadableField(Fields.MAX_REFRESH_TIME_LAG_IN_MILLIS, Fields.MAX_REFRESH_TIME_LAG, new TimeValue(maxRefreshTimeLag));
         builder.humanReadableField(Fields.TOTAL_TIME_SPENT_IN_MILLIS, Fields.TOTAL_TIME_SPENT, new TimeValue(totalUploadTime));
+
+        builder.startObject(Fields.PRESSURE);
+        builder.field(Fields.TOTAL_REJECTIONS, totalRejections);
+        builder.endObject(); // PRESSURE
     }
 
     private void buildDownloadStats(XContentBuilder builder) throws IOException {
@@ -299,5 +333,45 @@ public class RemoteSegmentStats implements Writeable, ToXContentFragment {
         static final String MAX_BYTES = "max_bytes";
         static final String TOTAL_TIME_SPENT = "total_time_spent";
         static final String TOTAL_TIME_SPENT_IN_MILLIS = "total_time_spent_in_millis";
+        static final String PRESSURE = "pressure";
+        static final String TOTAL_REJECTIONS = "total_rejections";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        RemoteSegmentStats that = (RemoteSegmentStats) o;
+        return uploadBytesStarted == that.uploadBytesStarted
+            && uploadBytesFailed == that.uploadBytesFailed
+            && uploadBytesSucceeded == that.uploadBytesSucceeded
+            && downloadBytesStarted == that.downloadBytesStarted
+            && downloadBytesFailed == that.downloadBytesFailed
+            && downloadBytesSucceeded == that.downloadBytesSucceeded
+            && maxRefreshTimeLag == that.maxRefreshTimeLag
+            && maxRefreshBytesLag == that.maxRefreshBytesLag
+            && totalRefreshBytesLag == that.totalRefreshBytesLag
+            && totalUploadTime == that.totalUploadTime
+            && totalDownloadTime == that.totalDownloadTime
+            && totalRejections == that.totalRejections;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+            uploadBytesStarted,
+            uploadBytesFailed,
+            uploadBytesSucceeded,
+            downloadBytesStarted,
+            downloadBytesFailed,
+            downloadBytesSucceeded,
+            maxRefreshTimeLag,
+            maxRefreshBytesLag,
+            totalRefreshBytesLag,
+            totalUploadTime,
+            totalDownloadTime,
+            totalRejections
+        );
     }
 }

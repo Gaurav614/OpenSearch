@@ -8,21 +8,37 @@
 
 package org.opensearch.remotestore;
 
+import org.opensearch.action.admin.cluster.remotestore.restore.RestoreRemoteStoreRequest;
+import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesRequest;
+import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesResponse;
+import org.opensearch.action.admin.indices.get.GetIndexRequest;
+import org.opensearch.action.admin.indices.get.GetIndexResponse;
 import org.opensearch.action.bulk.BulkItemResponse;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.index.IndexRequestBuilder;
 import org.opensearch.action.index.IndexResponse;
+import org.opensearch.action.support.PlainActionFuture;
 import org.opensearch.action.support.WriteRequest;
 import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.RepositoriesMetadata;
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.UUIDs;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;
+import org.opensearch.core.index.Index;
 import org.opensearch.index.IndexModule;
+import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MapperService;
+import org.opensearch.index.shard.IndexShard;
+import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.replication.common.ReplicationType;
+import org.opensearch.repositories.RepositoriesService;
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+import org.opensearch.repositories.fs.ReloadableFsRepository;
 import org.opensearch.test.OpenSearchIntegTestCase;
 import org.junit.After;
 
@@ -34,27 +50,30 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
-import static org.opensearch.indices.IndicesService.CLUSTER_REMOTE_SEGMENT_STORE_REPOSITORY_SETTING;
-import static org.opensearch.indices.IndicesService.CLUSTER_REMOTE_STORE_ENABLED_SETTING;
-import static org.opensearch.indices.IndicesService.CLUSTER_REMOTE_TRANSLOG_REPOSITORY_SETTING;
-import static org.opensearch.indices.IndicesService.CLUSTER_REPLICATION_TYPE_SETTING;
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_REPOSITORY_SETTINGS_ATTRIBUTE_KEY_PREFIX;
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_REPOSITORY_TYPE_ATTRIBUTE_KEY_FORMAT;
+import static org.opensearch.repositories.fs.ReloadableFsRepository.REPOSITORIES_FAILRATE_SETTING;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 
 public class RemoteStoreBaseIntegTestCase extends OpenSearchIntegTestCase {
     protected static final String REPOSITORY_NAME = "test-remote-store-repo";
     protected static final String REPOSITORY_2_NAME = "test-remote-store-repo-2";
     protected static final int SHARD_COUNT = 1;
-    protected static final int REPLICA_COUNT = 1;
+    protected static int REPLICA_COUNT = 1;
     protected static final String TOTAL_OPERATIONS = "total-operations";
     protected static final String REFRESHED_OR_FLUSHED_OPERATIONS = "refreshed-or-flushed-operations";
     protected static final String MAX_SEQ_NO_TOTAL = "max-seq-no-total";
     protected static final String MAX_SEQ_NO_REFRESHED_OR_FLUSHED = "max-seq-no-refreshed-or-flushed";
 
-    protected Path absolutePath;
-    protected Path absolutePath2;
+    protected Path segmentRepoPath;
+    protected Path translogRepoPath;
+    protected boolean clusterSettingsSuppliedByTest = false;
     private final List<String> documentKeys = List.of(
         randomAlphaOfLength(5),
         randomAlphaOfLength(5),
@@ -64,6 +83,10 @@ public class RemoteStoreBaseIntegTestCase extends OpenSearchIntegTestCase {
     );
 
     protected Map<String, Long> indexData(int numberOfIterations, boolean invokeFlush, String index) {
+        return indexData(numberOfIterations, invokeFlush, false, index);
+    }
+
+    protected Map<String, Long> indexData(int numberOfIterations, boolean invokeFlush, boolean emptyTranslog, String index) {
         long totalOperations = 0;
         long refreshedOrFlushedOperations = 0;
         long maxSeqNo = -1;
@@ -75,6 +98,11 @@ public class RemoteStoreBaseIntegTestCase extends OpenSearchIntegTestCase {
                 flushAndRefresh(index);
             } else {
                 refresh(index);
+            }
+
+            // skip indexing if last iteration as we dont want to have any data in remote translog
+            if (emptyTranslog && i == numberOfIterations - 1) {
+                continue;
             }
             maxSeqNoRefreshedOrFlushed = maxSeqNo;
             indexingStats.put(MAX_SEQ_NO_REFRESHED_OR_FLUSHED + "-shard-" + shardId, maxSeqNoRefreshedOrFlushed);
@@ -102,25 +130,31 @@ public class RemoteStoreBaseIntegTestCase extends OpenSearchIntegTestCase {
     }
 
     @Override
-    protected boolean addMockInternalEngine() {
-        return false;
-    }
-
-    @Override
     protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(remoteStoreClusterSettings(REPOSITORY_NAME, REPOSITORY_2_NAME, true))
-            .build();
+        if (segmentRepoPath == null || translogRepoPath == null) {
+            segmentRepoPath = randomRepoPath().toAbsolutePath();
+            translogRepoPath = randomRepoPath().toAbsolutePath();
+        }
+        if (clusterSettingsSuppliedByTest) {
+            return Settings.builder().put(super.nodeSettings(nodeOrdinal)).build();
+        } else {
+            return Settings.builder()
+                .put(super.nodeSettings(nodeOrdinal))
+                .put(remoteStoreClusterSettings(REPOSITORY_NAME, segmentRepoPath, REPOSITORY_2_NAME, translogRepoPath))
+                .build();
+        }
     }
 
-    @Override
-    protected Settings featureFlagSettings() {
-        return Settings.builder()
-            .put(super.featureFlagSettings())
-            .put(FeatureFlags.REMOTE_STORE, "true")
-            .put(FeatureFlags.SEGMENT_REPLICATION_EXPERIMENTAL, "true")
-            .build();
+    protected void setFailRate(String repoName, int value) throws ExecutionException, InterruptedException {
+        GetRepositoriesRequest gr = new GetRepositoriesRequest(new String[] { repoName });
+        GetRepositoriesResponse res = client().admin().cluster().getRepositories(gr).get();
+        RepositoryMetadata rmd = res.repositories().get(0);
+        Settings.Builder settings = Settings.builder()
+            .put("location", rmd.settings().get("location"))
+            .put(REPOSITORIES_FAILRATE_SETTING.getKey(), value);
+        assertAcked(
+            client().admin().cluster().preparePutRepository(repoName).setType(ReloadableFsRepository.TYPE).setSettings(settings).get()
+        );
     }
 
     public Settings indexSettings() {
@@ -151,34 +185,6 @@ public class RemoteStoreBaseIntegTestCase extends OpenSearchIntegTestCase {
             bulkRequest.add(request);
         }
         return client().bulk(bulkRequest).actionGet();
-    }
-
-    public static Settings remoteStoreClusterSettings(String segmentRepoName) {
-        return remoteStoreClusterSettings(segmentRepoName, segmentRepoName);
-    }
-
-    public static Settings remoteStoreClusterSettings(
-        String segmentRepoName,
-        String translogRepoName,
-        boolean randomizeSameRepoForRSSAndRTS
-    ) {
-        return remoteStoreClusterSettings(
-            segmentRepoName,
-            randomizeSameRepoForRSSAndRTS ? (randomBoolean() ? translogRepoName : segmentRepoName) : translogRepoName
-        );
-    }
-
-    public static Settings remoteStoreClusterSettings(String segmentRepoName, String translogRepoName) {
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(CLUSTER_REMOTE_STORE_ENABLED_SETTING.getKey(), true)
-            .put(CLUSTER_REMOTE_SEGMENT_STORE_REPOSITORY_SETTING.getKey(), segmentRepoName)
-            .put(CLUSTER_REMOTE_TRANSLOG_REPOSITORY_SETTING.getKey(), translogRepoName);
-
-        if (randomBoolean()) {
-            settingsBuilder.put(CLUSTER_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT);
-        }
-
-        return settingsBuilder.build();
     }
 
     private Settings defaultIndexSettings() {
@@ -212,32 +218,59 @@ public class RemoteStoreBaseIntegTestCase extends OpenSearchIntegTestCase {
             .build();
     }
 
-    protected void putRepository(Path path) {
-        putRepository(path, REPOSITORY_NAME);
-    }
-
-    protected void putRepository(Path path, String repoName) {
-        assertAcked(clusterAdmin().preparePutRepository(repoName).setType("fs").setSettings(Settings.builder().put("location", path)));
-    }
-
-    protected void setupRepo() {
-        setupRepo(true);
-    }
-
-    protected void setupRepo(boolean startDedicatedClusterManager) {
-        if (startDedicatedClusterManager) {
-            internalCluster().startClusterManagerOnlyNode();
-        }
-        absolutePath = randomRepoPath().toAbsolutePath();
-        putRepository(absolutePath);
-        absolutePath2 = randomRepoPath().toAbsolutePath();
-        putRepository(absolutePath2, REPOSITORY_2_NAME);
-    }
-
     @After
     public void teardown() {
-        assertAcked(clusterAdmin().prepareDeleteRepository(REPOSITORY_NAME));
-        assertAcked(clusterAdmin().prepareDeleteRepository(REPOSITORY_2_NAME));
+        clusterSettingsSuppliedByTest = false;
+        assertRemoteStoreRepositoryOnAllNodes(REPOSITORY_NAME);
+        assertRemoteStoreRepositoryOnAllNodes(REPOSITORY_2_NAME);
+        clusterAdmin().prepareCleanupRepository(REPOSITORY_NAME).get();
+        clusterAdmin().prepareCleanupRepository(REPOSITORY_2_NAME).get();
+    }
+
+    public RepositoryMetadata buildRepositoryMetadata(DiscoveryNode node, String name) {
+        Map<String, String> nodeAttributes = node.getAttributes();
+        String type = nodeAttributes.get(String.format(Locale.getDefault(), REMOTE_STORE_REPOSITORY_TYPE_ATTRIBUTE_KEY_FORMAT, name));
+
+        String settingsAttributeKeyPrefix = String.format(Locale.getDefault(), REMOTE_STORE_REPOSITORY_SETTINGS_ATTRIBUTE_KEY_PREFIX, name);
+        Map<String, String> settingsMap = node.getAttributes()
+            .keySet()
+            .stream()
+            .filter(key -> key.startsWith(settingsAttributeKeyPrefix))
+            .collect(Collectors.toMap(key -> key.replace(settingsAttributeKeyPrefix, ""), key -> node.getAttributes().get(key)));
+
+        Settings.Builder settings = Settings.builder();
+        settingsMap.entrySet().forEach(entry -> settings.put(entry.getKey(), entry.getValue()));
+        settings.put(BlobStoreRepository.SYSTEM_REPOSITORY_SETTING.getKey(), true);
+
+        return new RepositoryMetadata(name, type, settings.build());
+    }
+
+    public void assertRemoteStoreRepositoryOnAllNodes(String repositoryName) {
+        RepositoriesMetadata repositories = internalCluster().getInstance(ClusterService.class, internalCluster().getNodeNames()[0])
+            .state()
+            .metadata()
+            .custom(RepositoriesMetadata.TYPE);
+        RepositoryMetadata actualRepository = repositories.repository(repositoryName);
+
+        final RepositoriesService repositoriesService = internalCluster().getClusterManagerNodeInstance(RepositoriesService.class);
+        final BlobStoreRepository repository = (BlobStoreRepository) repositoriesService.repository(repositoryName);
+
+        for (String nodeName : internalCluster().getNodeNames()) {
+            ClusterService clusterService = internalCluster().getInstance(ClusterService.class, nodeName);
+            DiscoveryNode node = clusterService.localNode();
+            RepositoryMetadata expectedRepository = buildRepositoryMetadata(node, repositoryName);
+
+            // Validated that all the restricted settings are entact on all the nodes.
+            repository.getRestrictedSystemRepositorySettings()
+                .stream()
+                .forEach(
+                    setting -> assertEquals(
+                        String.format(Locale.ROOT, "Restricted Settings mismatch [%s]", setting.getKey()),
+                        setting.get(actualRepository.settings()),
+                        setting.get(expectedRepository.settings())
+                    )
+                );
+        }
     }
 
     public static int getFileCount(Path path) throws Exception {
@@ -258,4 +291,24 @@ public class RemoteStoreBaseIntegTestCase extends OpenSearchIntegTestCase {
         return filesExisting.get();
     }
 
+    protected IndexShard getIndexShard(String dataNode, String indexName) throws ExecutionException, InterruptedException {
+        String clusterManagerName = internalCluster().getClusterManagerName();
+        IndicesService indicesService = internalCluster().getInstance(IndicesService.class, dataNode);
+        GetIndexResponse getIndexResponse = client(clusterManagerName).admin().indices().getIndex(new GetIndexRequest()).get();
+        String uuid = getIndexResponse.getSettings().get(indexName).get(IndexMetadata.SETTING_INDEX_UUID);
+        IndexService indexService = indicesService.indexService(new Index(indexName, uuid));
+        return indexService.getShard(0);
+    }
+
+    protected void restore(boolean restoreAllShards, String... indices) {
+        if (restoreAllShards) {
+            assertAcked(client().admin().indices().prepareClose(indices));
+        }
+        client().admin()
+            .cluster()
+            .restoreRemoteStore(
+                new RestoreRemoteStoreRequest().indices(indices).restoreAllShards(restoreAllShards),
+                PlainActionFuture.newFuture()
+            );
+    }
 }

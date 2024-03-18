@@ -60,6 +60,8 @@ import org.opensearch.core.transport.TransportResponse;
 import org.opensearch.monitor.NodeHealthService;
 import org.opensearch.monitor.StatusInfo;
 import org.opensearch.node.Node;
+import org.opensearch.node.remotestore.RemoteStoreNodeService;
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
 import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.test.transport.CapturingTransport;
@@ -89,6 +91,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+
+import org.mockito.Mockito;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
@@ -244,7 +248,8 @@ public class NodeJoinTests extends OpenSearchTestCase {
             TransportService.NOOP_TRANSPORT_INTERCEPTOR,
             x -> initialState.nodes().getLocalNode(),
             clusterSettings,
-            Collections.emptySet()
+            Collections.emptySet(),
+            NoopTracer.INSTANCE
         );
         final PersistedStateRegistry persistedStateRegistry = persistedStateRegistry();
         persistedStateRegistry.addPersistedState(PersistedStateType.LOCAL, new InMemoryPersistedState(term, initialState));
@@ -264,7 +269,8 @@ public class NodeJoinTests extends OpenSearchTestCase {
             (s, p, r) -> {},
             ElectionStrategy.DEFAULT_INSTANCE,
             nodeHealthService,
-            persistedStateRegistry
+            persistedStateRegistry,
+            Mockito.mock(RemoteStoreNodeService.class)
         );
         transportService.start();
         transportService.acceptIncomingRequests();

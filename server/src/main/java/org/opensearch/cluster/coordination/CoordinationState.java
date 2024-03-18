@@ -52,7 +52,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.opensearch.cluster.coordination.Coordinator.ZEN1_BWC_TERM;
-import static org.opensearch.gateway.remote.RemoteClusterStateService.REMOTE_CLUSTER_STATE_ENABLED_SETTING;
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.isRemoteStoreClusterStateEnabled;
 
 /**
  * The core class of the cluster state coordination algorithm, directly implementing the
@@ -101,7 +101,7 @@ public class CoordinationState {
             .getLastAcceptedState()
             .getLastAcceptedConfiguration();
         this.publishVotes = new VoteCollection();
-        this.isRemoteStateEnabled = REMOTE_CLUSTER_STATE_ENABLED_SETTING.get(settings);
+        this.isRemoteStateEnabled = isRemoteStoreClusterStateEnabled(settings);
     }
 
     public long getCurrentTerm() {
@@ -637,6 +637,12 @@ public class CoordinationState {
          * The value returned by {@link #getCurrentTerm()} should not be influenced by calls to this method.
          */
         void setLastAcceptedState(ClusterState clusterState);
+
+        /**
+         * Returns the stats for the persistence layer for {@link CoordinationState}.
+         * @return PersistedStateStats
+         */
+        PersistedStateStats getStats();
 
         /**
          * Marks the last accepted cluster state as committed.

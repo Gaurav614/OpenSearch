@@ -32,6 +32,8 @@
 
 package org.opensearch.indices.stats;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+
 import org.apache.lucene.tests.util.LuceneTestCase.SuppressCodecs;
 import org.opensearch.action.DocWriteResponse;
 import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
@@ -63,14 +65,15 @@ import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.index.IndexModule;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
-import org.opensearch.index.MergePolicyConfig;
 import org.opensearch.index.MergeSchedulerConfig;
+import org.opensearch.index.TieredMergePolicyProvider;
 import org.opensearch.index.VersionType;
 import org.opensearch.index.cache.query.QueryCacheStats;
 import org.opensearch.index.engine.VersionConflictEngineException;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.remote.RemoteSegmentStats;
 import org.opensearch.index.shard.IndexShard;
+import org.opensearch.index.translog.RemoteTranslogStats;
 import org.opensearch.index.translog.Translog;
 import org.opensearch.indices.IndicesQueryCache;
 import org.opensearch.indices.IndicesRequestCache;
@@ -79,9 +82,9 @@ import org.opensearch.indices.replication.common.ReplicationType;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.search.sort.SortOrder;
 import org.opensearch.test.InternalSettingsPlugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
 import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
 import org.opensearch.test.OpenSearchIntegTestCase.Scope;
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -104,6 +107,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
 import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+import static org.opensearch.indices.IndicesService.CLUSTER_REPLICATION_TYPE_SETTING;
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAllSuccessful;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;
@@ -117,7 +122,19 @@ import static org.hamcrest.Matchers.nullValue;
 
 @ClusterScope(scope = Scope.SUITE, numDataNodes = 2, numClientNodes = 0)
 @SuppressCodecs("*") // requires custom completion format
-public class IndexStatsIT extends OpenSearchIntegTestCase {
+public class IndexStatsIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+    public IndexStatsIT(Settings settings) {
+        super(settings);
+    }
+
+    @ParametersFactory
+    public static Collection<Object[]> parameters() {
+        return Arrays.asList(
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() },
+            new Object[] { Settings.builder().put(CLUSTER_REPLICATION_TYPE_SETTING.getKey(), ReplicationType.SEGMENT).build() }
+        );
+    }
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
@@ -148,7 +165,7 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
         return Settings.builder().put(indexSettings());
     }
 
-    public void testFieldDataStats() {
+    public void testFieldDataStats() throws InterruptedException {
         assertAcked(
             client().admin()
                 .indices()
@@ -160,7 +177,8 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
         ensureGreen();
         client().prepareIndex("test").setId("1").setSource("field", "value1", "field2", "value1").execute().actionGet();
         client().prepareIndex("test").setId("2").setSource("field", "value2", "field2", "value2").execute().actionGet();
-        client().admin().indices().prepareRefresh().execute().actionGet();
+        refreshAndWaitForReplication();
+        indexRandomForConcurrentSearch("test");
 
         NodesStatsResponse nodesStats = client().admin().cluster().prepareNodesStats("data:true").setIndices(true).execute().actionGet();
         assertThat(
@@ -283,7 +301,8 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
         client().admin().cluster().prepareHealth().setWaitForGreenStatus().execute().actionGet();
         client().prepareIndex("test").setId("1").setSource("field", "value1").execute().actionGet();
         client().prepareIndex("test").setId("2").setSource("field", "value2").execute().actionGet();
-        client().admin().indices().prepareRefresh().execute().actionGet();
+        refreshAndWaitForReplication();
+        indexRandomForConcurrentSearch("test");
 
         NodesStatsResponse nodesStats = client().admin().cluster().prepareNodesStats("data:true").setIndices(true).execute().actionGet();
         assertThat(
@@ -568,8 +587,8 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
             prepareCreate("test").setSettings(
                 settingsBuilder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, "1")
                     .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, "0")
-                    .put(MergePolicyConfig.INDEX_MERGE_POLICY_MAX_MERGE_AT_ONCE_SETTING.getKey(), "2")
-                    .put(MergePolicyConfig.INDEX_MERGE_POLICY_SEGMENTS_PER_TIER_SETTING.getKey(), "2")
+                    .put(TieredMergePolicyProvider.INDEX_MERGE_POLICY_MAX_MERGE_AT_ONCE_SETTING.getKey(), "2")
+                    .put(TieredMergePolicyProvider.INDEX_MERGE_POLICY_SEGMENTS_PER_TIER_SETTING.getKey(), "2")
                     .put(MergeSchedulerConfig.MAX_THREAD_COUNT_SETTING.getKey(), "1")
                     .put(MergeSchedulerConfig.MAX_MERGE_COUNT_SETTING.getKey(), "10000")
             )
@@ -600,8 +619,8 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
             prepareCreate("test").setSettings(
                 settingsBuilder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, "1")
                     .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, "0")
-                    .put(MergePolicyConfig.INDEX_MERGE_POLICY_MAX_MERGE_AT_ONCE_SETTING.getKey(), "2")
-                    .put(MergePolicyConfig.INDEX_MERGE_POLICY_SEGMENTS_PER_TIER_SETTING.getKey(), "2")
+                    .put(TieredMergePolicyProvider.INDEX_MERGE_POLICY_MAX_MERGE_AT_ONCE_SETTING.getKey(), "2")
+                    .put(TieredMergePolicyProvider.INDEX_MERGE_POLICY_SEGMENTS_PER_TIER_SETTING.getKey(), "2")
                     .put(MergeSchedulerConfig.MAX_THREAD_COUNT_SETTING.getKey(), "1")
                     .put(MergeSchedulerConfig.MAX_MERGE_COUNT_SETTING.getKey(), "1")
                     .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC.name())
@@ -650,7 +669,7 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
         client().prepareIndex("test1").setId(Integer.toString(1)).setSource("field", "value").execute().actionGet();
         client().prepareIndex("test1").setId(Integer.toString(2)).setSource("field", "value").execute().actionGet();
         client().prepareIndex("test2").setId(Integer.toString(1)).setSource("field", "value").execute().actionGet();
-        refresh();
+        refreshAndWaitForReplication();
 
         NumShards test1 = getNumShards("test1");
         long test1ExpectedWrites = 2 * test1.dataCopies;
@@ -665,7 +684,13 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
         assertThat(stats.getPrimaries().getIndexing().getTotal().getIndexFailedCount(), equalTo(0L));
         assertThat(stats.getPrimaries().getIndexing().getTotal().isThrottled(), equalTo(false));
         assertThat(stats.getPrimaries().getIndexing().getTotal().getThrottleTime().millis(), equalTo(0L));
-        assertThat(stats.getTotal().getIndexing().getTotal().getIndexCount(), equalTo(totalExpectedWrites));
+
+        // This assert should not be done on segrep enabled indices because we are asserting Indexing/Write operations count on
+        // all primary and replica shards. But in case of segrep, Indexing/Write operation don't happen on replica shards. So we can
+        // ignore this assert check for segrep enabled indices.
+        if (isSegmentReplicationEnabledForIndex("test1") == false && isSegmentReplicationEnabledForIndex("test2") == false) {
+            assertThat(stats.getTotal().getIndexing().getTotal().getIndexCount(), equalTo(totalExpectedWrites));
+        }
         assertThat(stats.getTotal().getStore(), notNullValue());
         assertThat(stats.getTotal().getMerge(), notNullValue());
         assertThat(stats.getTotal().getFlush(), notNullValue());
@@ -808,6 +833,7 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
         client().admin().indices().prepareForceMerge().setMaxNumSegments(1).execute().actionGet();
         stats = client().admin().indices().prepareStats().setMerge(true).execute().actionGet();
 
+        refreshAndWaitForReplication();
         assertThat(stats.getTotal().getMerge(), notNullValue());
         assertThat(stats.getTotal().getMerge().getTotal(), greaterThan(0L));
     }
@@ -834,7 +860,7 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
 
         client().admin().indices().prepareFlush().get();
         client().admin().indices().prepareForceMerge().setMaxNumSegments(1).execute().actionGet();
-        client().admin().indices().prepareRefresh().get();
+        refreshAndWaitForReplication();
         stats = client().admin().indices().prepareStats().setSegments(true).get();
 
         assertThat(stats.getTotal().getSegments(), notNullValue());
@@ -852,7 +878,7 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
         client().prepareIndex("test_index").setId(Integer.toString(2)).setSource("field", "value").execute().actionGet();
         client().prepareIndex("test_index_2").setId(Integer.toString(1)).setSource("field", "value").execute().actionGet();
 
-        client().admin().indices().prepareRefresh().execute().actionGet();
+        refreshAndWaitForReplication();
         IndicesStatsRequestBuilder builder = client().admin().indices().prepareStats();
         Flag[] values = CommonStatsFlags.Flag.values();
         for (Flag flag : values) {
@@ -1436,9 +1462,13 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
                 .get()
                 .status()
         );
-        ShardStats shard = client().admin().indices().prepareStats(indexName).setSegments(true).get().getShards()[0];
+        refreshAndWaitForReplication();
+        ShardStats shard = client().admin().indices().prepareStats(indexName).setSegments(true).setTranslog(true).get().getShards()[0];
         RemoteSegmentStats remoteSegmentStatsFromIndexStats = shard.getStats().getSegments().getRemoteSegmentStats();
         assertZeroRemoteSegmentStats(remoteSegmentStatsFromIndexStats);
+        RemoteTranslogStats remoteTranslogStatsFromIndexStats = shard.getStats().getTranslog().getRemoteTranslogStats();
+        assertZeroRemoteTranslogStats(remoteTranslogStatsFromIndexStats);
+
         NodesStatsResponse nodesStatsResponse = client().admin().cluster().prepareNodesStats(primaryNodeName(indexName)).get();
         RemoteSegmentStats remoteSegmentStatsFromNodesStats = nodesStatsResponse.getNodes()
             .get(0)
@@ -1446,20 +1476,22 @@ public class IndexStatsIT extends OpenSearchIntegTestCase {
             .getSegments()
             .getRemoteSegmentStats();
         assertZeroRemoteSegmentStats(remoteSegmentStatsFromNodesStats);
+        RemoteTranslogStats remoteTranslogStatsFromNodesStats = nodesStatsResponse.getNodes()
+            .get(0)
+            .getIndices()
+            .getTranslog()
+            .getRemoteTranslogStats();
+        assertZeroRemoteTranslogStats(remoteTranslogStatsFromNodesStats);
     }
 
     private void assertZeroRemoteSegmentStats(RemoteSegmentStats remoteSegmentStats) {
-        assertEquals(0, remoteSegmentStats.getUploadBytesStarted());
-        assertEquals(0, remoteSegmentStats.getUploadBytesSucceeded());
-        assertEquals(0, remoteSegmentStats.getUploadBytesFailed());
-        assertEquals(0, remoteSegmentStats.getDownloadBytesStarted());
-        assertEquals(0, remoteSegmentStats.getDownloadBytesSucceeded());
-        assertEquals(0, remoteSegmentStats.getDownloadBytesFailed());
-        assertEquals(0, remoteSegmentStats.getTotalRefreshBytesLag());
-        assertEquals(0, remoteSegmentStats.getMaxRefreshBytesLag());
-        assertEquals(0, remoteSegmentStats.getMaxRefreshTimeLag());
-        assertEquals(0, remoteSegmentStats.getTotalUploadTime());
-        assertEquals(0, remoteSegmentStats.getTotalDownloadTime());
+        // Compare with fresh object because all values default to 0 in default fresh object
+        assertEquals(new RemoteSegmentStats(), remoteSegmentStats);
+    }
+
+    private void assertZeroRemoteTranslogStats(RemoteTranslogStats remoteTranslogStats) {
+        // Compare with fresh object because all values default to 0 in default fresh object
+        assertEquals(new RemoteTranslogStats(), remoteTranslogStats);
     }
 
     /**

@@ -11,7 +11,6 @@ package org.opensearch.index.store;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
@@ -29,7 +28,6 @@ import org.opensearch.common.blobstore.stream.write.WritePriority;
 import org.opensearch.common.blobstore.transfer.RemoteTransferContainer;
 import org.opensearch.common.blobstore.transfer.stream.OffsetRangeIndexInputStream;
 import org.opensearch.common.blobstore.transfer.stream.OffsetRangeInputStream;
-import org.opensearch.common.util.ByteUtils;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.index.store.exception.ChecksumCombinationException;
 
@@ -41,15 +39,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
-import java.util.zip.CRC32;
 
-import com.jcraft.jzlib.JZlib;
+import static org.opensearch.common.blobstore.transfer.RemoteTransferContainer.checksumOfChecksum;
 
 /**
  * A {@code RemoteDirectory} provides an abstraction layer for storing a list of files to a remote store.
@@ -65,9 +61,9 @@ public class RemoteDirectory extends Directory {
     protected final BlobContainer blobContainer;
     private static final Logger logger = LogManager.getLogger(RemoteDirectory.class);
 
-    protected final UnaryOperator<OffsetRangeInputStream> uploadRateLimiter;
+    private final UnaryOperator<OffsetRangeInputStream> uploadRateLimiter;
 
-    protected final UnaryOperator<InputStream> downloadRateLimiter;
+    private final UnaryOperator<InputStream> downloadRateLimiter;
 
     /**
      * Number of bytes in the segment file to store checksum
@@ -196,10 +192,14 @@ public class RemoteDirectory extends Directory {
      */
     @Override
     public IndexInput openInput(String name, IOContext context) throws IOException {
+        return openInput(name, fileLength(name), context);
+    }
+
+    public IndexInput openInput(String name, long fileLength, IOContext context) throws IOException {
         InputStream inputStream = null;
         try {
             inputStream = blobContainer.readBlob(name);
-            return new RemoteIndexInput(name, downloadRateLimiter.apply(inputStream), fileLength(name));
+            return new RemoteIndexInput(name, downloadRateLimiter.apply(inputStream), fileLength);
         } catch (Exception e) {
             // Incase the RemoteIndexInput creation fails, close the input stream to avoid file handler leak.
             if (inputStream != null) {
@@ -233,9 +233,9 @@ public class RemoteDirectory extends Directory {
     @Override
     public long fileLength(String name) throws IOException {
         // ToDo: Instead of calling remote store each time, keep a cache with segment metadata
-        Map<String, BlobMetadata> metadata = blobContainer.listBlobsByPrefix(name);
-        if (metadata.containsKey(name)) {
-            return metadata.get(name).length();
+        List<BlobMetadata> metadata = blobContainer.listBlobsByPrefixInSortedOrder(name, 1, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC);
+        if (metadata.size() == 1 && metadata.get(0).name().equals(name)) {
+            return metadata.get(0).length();
         }
         throw new NoSuchFileException(name);
     }
@@ -401,11 +401,8 @@ public class RemoteDirectory extends Directory {
 
     private long calculateChecksumOfChecksum(Directory directory, String file) throws IOException {
         try (IndexInput indexInput = directory.openInput(file, IOContext.DEFAULT)) {
-            long storedChecksum = CodecUtil.retrieveChecksum(indexInput);
-            CRC32 checksumOfChecksum = new CRC32();
-            checksumOfChecksum.update(ByteUtils.toByteArrayBE(storedChecksum));
             try {
-                return JZlib.crc32_combine(storedChecksum, checksumOfChecksum.getValue(), SEGMENT_CHECKSUM_BYTES);
+                return checksumOfChecksum(indexInput, SEGMENT_CHECKSUM_BYTES);
             } catch (Exception e) {
                 throw new ChecksumCombinationException(
                     "Potentially corrupted file: Checksum combination failed while combining stored checksum "

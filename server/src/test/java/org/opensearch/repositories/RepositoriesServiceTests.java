@@ -57,6 +57,7 @@ import org.opensearch.common.blobstore.BlobStore;
 import org.opensearch.common.crypto.CryptoHandler;
 import org.opensearch.common.crypto.DecryptedRangedStreamProvider;
 import org.opensearch.common.crypto.EncryptedHeaderContentSupplier;
+import org.opensearch.common.crypto.MasterKeyProvider;
 import org.opensearch.common.io.InputStreamContainer;
 import org.opensearch.common.lifecycle.Lifecycle;
 import org.opensearch.common.lifecycle.LifecycleListener;
@@ -65,7 +66,6 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.encryption.CryptoManager;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
 import org.opensearch.index.snapshots.blobstore.RemoteStoreShardShallowCopySnapshot;
@@ -73,9 +73,11 @@ import org.opensearch.index.store.Store;
 import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
 import org.opensearch.indices.recovery.RecoverySettings;
 import org.opensearch.indices.recovery.RecoveryState;
+import org.opensearch.plugins.CryptoPlugin;
 import org.opensearch.repositories.blobstore.MeteredBlobStoreRepository;
 import org.opensearch.snapshots.SnapshotId;
 import org.opensearch.snapshots.SnapshotInfo;
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.Transport;
@@ -89,10 +91,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static org.opensearch.repositories.blobstore.BlobStoreRepository.SYSTEM_REPOSITORY_SETTING;
 import static org.hamcrest.Matchers.equalTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -102,6 +104,8 @@ import static org.mockito.Mockito.when;
 public class RepositoriesServiceTests extends OpenSearchTestCase {
 
     private RepositoriesService repositoriesService;
+    private final String kpTypeA = "kp-type-a";
+    private final String kpTypeB = "kp-type-b";
 
     @Override
     public void setUp() throws Exception {
@@ -122,7 +126,8 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
             TransportService.NOOP_TRANSPORT_INTERCEPTOR,
             boundAddress -> DiscoveryNode.createLocal(Settings.EMPTY, boundAddress.publishAddress(), UUIDs.randomBase64UUID()),
             null,
-            Collections.emptySet()
+            Collections.emptySet(),
+            NoopTracer.INSTANCE
         );
         final ClusterApplierService clusterApplierService = mock(ClusterApplierService.class);
         when(clusterApplierService.threadPool()).thenReturn(threadPool);
@@ -197,6 +202,13 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
         }
     }
 
+    public void testUpdateOrRegisterRejectsForSystemRepository() {
+        String repoName = "name";
+        PutRepositoryRequest request = new PutRepositoryRequest(repoName);
+        request.settings(Settings.builder().put(SYSTEM_REPOSITORY_SETTING.getKey(), true).build());
+        expectThrows(RepositoryException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
+    }
+
     public void testRepositoriesStatsCanHaveTheSameNameAndDifferentTypeOverTime() {
         String repoName = "name";
         expectThrows(RepositoryMissingException.class, () -> repositoriesService.repository(repoName));
@@ -207,20 +219,17 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
         assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
 
         repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", emptyState(), clusterStateWithRepoTypeA));
-        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
+        assertThat(repositoriesService.repositoriesStats().size(), equalTo(0));
 
         ClusterState clusterStateWithRepoTypeB = createClusterStateWithRepo(repoName, MeteredRepositoryTypeB.TYPE);
         repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeB, emptyState()));
 
         List<RepositoryStatsSnapshot> repositoriesStats = repositoriesService.repositoriesStats();
-        assertThat(repositoriesStats.size(), equalTo(2));
+        assertThat(repositoriesStats.size(), equalTo(1));
         RepositoryStatsSnapshot repositoryStatsTypeA = repositoriesStats.get(0);
-        assertThat(repositoryStatsTypeA.getRepositoryInfo().type, equalTo(MeteredRepositoryTypeA.TYPE));
-        assertThat(repositoryStatsTypeA.getRepositoryStats(), equalTo(MeteredRepositoryTypeA.STATS));
+        assertThat(repositoryStatsTypeA.getRepositoryInfo().type, equalTo(MeteredRepositoryTypeB.TYPE));
+        assertThat(repositoryStatsTypeA.getRepositoryStats(), equalTo(MeteredRepositoryTypeB.STATS));
 
-        RepositoryStatsSnapshot repositoryStatsTypeB = repositoriesStats.get(1);
-        assertThat(repositoryStatsTypeB.getRepositoryInfo().type, equalTo(MeteredRepositoryTypeB.TYPE));
-        assertThat(repositoryStatsTypeB.getRepositoryStats(), equalTo(MeteredRepositoryTypeB.STATS));
     }
 
     public void testWithSameKeyProviderNames() {
@@ -229,28 +238,28 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
             "repoName",
             MeteredRepositoryTypeA.TYPE,
             keyProviderName,
-            TestCryptoManagerTypeA.TYPE
+            kpTypeA
         );
 
         repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));
         assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
         MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");
         assertNotNull(repository);
-        assertNotNull(repository.cryptoManager);
-        assertTrue(repository.cryptoManager instanceof TestCryptoManagerTypeA);
+        assertNotNull(repository.cryptoHandler);
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
 
         ClusterState clusterStateWithRepoTypeB = createClusterStateWithKeyProvider(
             "repoName",
             MeteredRepositoryTypeB.TYPE,
             keyProviderName,
-            TestCryptoManagerTypeB.TYPE
+            kpTypeA
         );
         repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeB, emptyState()));
-        assertThat(repositoriesService.repositoriesStats().size(), equalTo(2));
+        assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
         MeteredRepositoryTypeB repositoryB = (MeteredRepositoryTypeB) repositoriesService.repository("repoName");
         assertNotNull(repositoryB);
-        assertNotNull(repository.cryptoManager);
-        assertTrue(repository.cryptoManager instanceof TestCryptoManagerTypeA);
+        assertNotNull(repository.cryptoHandler);
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
     }
 
     public void testCryptoManagersUnchangedWithSameCryptoMetadata() {
@@ -259,21 +268,21 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
             "repoName",
             MeteredRepositoryTypeA.TYPE,
             keyProviderName,
-            TestCryptoManagerTypeA.TYPE
+            kpTypeA
         );
         repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));
         assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
         MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");
         assertNotNull(repository);
-        assertNotNull(repository.cryptoManager);
-        assertTrue(repository.cryptoManager instanceof TestCryptoManagerTypeA);
+        assertNotNull(repository.cryptoHandler);
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
 
         repositoriesService.applyClusterState(new ClusterChangedEvent("new repo", clusterStateWithRepoTypeA, emptyState()));
         assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
         repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");
         assertNotNull(repository);
-        assertNotNull(repository.cryptoManager);
-        assertTrue(repository.cryptoManager instanceof TestCryptoManagerTypeA);
+        assertNotNull(repository.cryptoHandler);
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
     }
 
     public void testRepositoryUpdateWithDifferentCryptoMetadata() {
@@ -283,7 +292,7 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
             "repoName",
             MeteredRepositoryTypeA.TYPE,
             keyProviderName,
-            TestCryptoManagerTypeA.TYPE
+            kpTypeA
         );
         ClusterService clusterService = mock(ClusterService.class);
 
@@ -303,25 +312,25 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
         assertThat(repositoriesService.repositoriesStats().size(), equalTo(1));
         MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository("repoName");
         assertNotNull(repository);
-        assertNotNull(repository.cryptoManager);
-        assertTrue(repository.cryptoManager instanceof TestCryptoManagerTypeA);
+        assertNotNull(repository.cryptoHandler);
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
 
-        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerRepository(request, null));
+        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
 
         CryptoSettings cryptoSettings = new CryptoSettings(keyProviderName);
-        cryptoSettings.keyProviderType(TestCryptoManagerTypeA.TYPE);
+        cryptoSettings.keyProviderType(kpTypeA);
         cryptoSettings.settings(Settings.builder().put("key-1", "val-1"));
         request.cryptoSettings(cryptoSettings);
-        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerRepository(request, null));
+        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
 
         cryptoSettings.settings(Settings.builder());
         cryptoSettings.keyProviderName("random");
-        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerRepository(request, null));
+        expectThrows(IllegalArgumentException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
 
         cryptoSettings.keyProviderName(keyProviderName);
 
-        cryptoSettings.keyProviderType(TestCryptoManagerTypeA.TYPE);
-        repositoriesService.registerRepository(request, null);
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
+        repositoriesService.registerOrUpdateRepository(request, null);
     }
 
     public void testCryptoManagerClusterStateChanges() {
@@ -332,7 +341,7 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
 
         String keyProviderName = "kp-name-1";
         String repoName = "repoName";
-        String keyProviderType = TestCryptoManagerTypeA.TYPE;
+        String keyProviderType = kpTypeA;
         Settings.Builder settings = Settings.builder();
         PutRepositoryRequest request = createPutRepositoryEncryptedRequest(
             repoName,
@@ -351,14 +360,14 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
             verified,
             repositoryMetadata
         );
-        repositoriesService.registerRepository(request, null);
+        repositoriesService.registerOrUpdateRepository(request, null);
         MeteredRepositoryTypeA repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
-        assertNotNull(repository.cryptoManager);
-        assertTrue(repository.cryptoManager instanceof TestCryptoManagerTypeA);
+        assertNotNull(repository.cryptoHandler);
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
         assertTrue(verified.get());
 
         // No change
-        keyProviderType = TestCryptoManagerTypeA.TYPE;
+        keyProviderType = kpTypeA;
         settings = Settings.builder();
         request = createPutRepositoryEncryptedRequest(repoName, MeteredRepositoryTypeA.TYPE, keyProviderName, settings, keyProviderType);
         verified.set(false);
@@ -371,16 +380,16 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
             verified,
             repositoryMetadata
         );
-        repositoriesService.registerRepository(request, null);
+        repositoriesService.registerOrUpdateRepository(request, null);
 
         repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
-        assertNotNull(repository.cryptoManager);
-        assertTrue(repository.cryptoManager instanceof TestCryptoManagerTypeA);
+        assertNotNull(repository.cryptoHandler);
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
         assertTrue(verified.get());
 
         // Same crypto client in new repo
         repoName = "repoName-2";
-        keyProviderType = TestCryptoManagerTypeA.TYPE;
+        keyProviderType = kpTypeA;
         settings = Settings.builder();
         request = createPutRepositoryEncryptedRequest(repoName, MeteredRepositoryTypeA.TYPE, keyProviderName, settings, keyProviderType);
         verified.set(false);
@@ -393,15 +402,15 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
             verified,
             repositoryMetadata
         );
-        repositoriesService.registerRepository(request, null);
+        repositoriesService.registerOrUpdateRepository(request, null);
         repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
-        assertNotNull(repository.cryptoManager);
-        assertTrue(repository.cryptoManager instanceof TestCryptoManagerTypeA);
+        assertNotNull(repository.cryptoHandler);
+        assertEquals(kpTypeA, repository.cryptoHandler.kpType);
         assertTrue(verified.get());
 
         // Different crypto client in new repo
         repoName = "repoName-3";
-        keyProviderType = TestCryptoManagerTypeB.TYPE;
+        keyProviderType = kpTypeB;
         settings = Settings.builder();
         request = createPutRepositoryEncryptedRequest(repoName, MeteredRepositoryTypeA.TYPE, keyProviderName, settings, keyProviderType);
         verified.set(false);
@@ -414,10 +423,10 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
             verified,
             repositoryMetadata
         );
-        repositoriesService.registerRepository(request, null);
+        repositoriesService.registerOrUpdateRepository(request, null);
         repository = (MeteredRepositoryTypeA) repositoriesService.repository(repoName);
-        assertNotNull(repository.cryptoManager);
-        assertTrue(repository.cryptoManager instanceof TestCryptoManagerTypeB);
+        assertNotNull(repository.cryptoHandler);
+        assertEquals(kpTypeB, repository.cryptoHandler.kpType);
         assertTrue(verified.get());
 
     }
@@ -526,10 +535,17 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
 
     private void assertThrowsOnRegister(String repoName) {
         PutRepositoryRequest request = new PutRepositoryRequest(repoName);
-        expectThrows(RepositoryException.class, () -> repositoriesService.registerRepository(request, null));
+        expectThrows(RepositoryException.class, () -> repositoriesService.registerOrUpdateRepository(request, null));
     }
 
     private static class TestCryptoProvider implements CryptoHandler<Object, Object> {
+        final String kpName;
+        final String kpType;
+
+        public TestCryptoProvider(String kpName, String kpType) {
+            this.kpName = kpName;
+            this.kpType = kpType;
+        }
 
         @Override
         public Object initEncryptionMetadata() {
@@ -584,75 +600,27 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
         public long estimateDecryptedLength(Object cryptoContext, long contentLength) {
             return 0;
         }
-    }
-
-    private static abstract class TestCryptoManager implements CryptoManager<Object, Object> {
-        private final String name;
-        private final AtomicInteger ref;
-
-        private final CryptoHandler<Object, Object> cryptoProvider;
-
-        public TestCryptoManager(Settings settings, String keyProviderName) {
-            this.name = keyProviderName;
-            this.ref = new AtomicInteger(1);
-            this.cryptoProvider = new TestCryptoProvider();
-        }
 
         @Override
-        public void incRef() {
-            ref.incrementAndGet();
-        }
+        public void close() throws IOException {
 
-        @Override
-        public boolean tryIncRef() {
-            ref.incrementAndGet();
-            return true;
-        }
-
-        @Override
-        public boolean decRef() {
-            ref.decrementAndGet();
-            return true;
-        }
-
-        public int getReferenceCount() {
-            return ref.get();
-        }
-
-        @Override
-        public String name() {
-            return name;
-        }
-
-        public CryptoHandler<Object, Object> getCryptoProvider() {
-            return cryptoProvider;
         }
     }
 
-    private static class TestCryptoManagerTypeA extends TestCryptoManager {
-        public static final String TYPE = "type-A";
+    private static abstract class TestCryptoHandler implements CryptoPlugin<Object, Object> {
+        private final Settings settings;
 
-        public TestCryptoManagerTypeA(Settings settings, String keyProviderName) {
-            super(settings, keyProviderName);
+        public TestCryptoHandler(Settings settings) {
+            this.settings = settings;
         }
 
-        @Override
-        public String type() {
-            return TYPE;
-        }
-
-    }
-
-    private static class TestCryptoManagerTypeB extends TestCryptoManager {
-        public static final String TYPE = "type-B";
-
-        public TestCryptoManagerTypeB(Settings settings, String keyProviderName) {
-            super(settings, keyProviderName);
-        }
-
-        @Override
-        public String type() {
-            return TYPE;
+        public CryptoHandler<Object, Object> getOrCreateCryptoHandler(
+            MasterKeyProvider keyProvider,
+            String keyProviderName,
+            String keyProviderType,
+            Runnable onClose
+        ) {
+            return new TestCryptoProvider(keyProviderName, keyProviderType);
         }
     }
 
@@ -753,6 +721,11 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
 
         @Override
         public boolean isReadOnly() {
+            return false;
+        }
+
+        @Override
+        public boolean isSystemRepository() {
             return false;
         }
 
@@ -880,31 +853,18 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
     private static class MeteredRepositoryTypeA extends MeteredBlobStoreRepository {
         private static final String TYPE = "type-a";
         private static final RepositoryStats STATS = new RepositoryStats(Map.of("GET", 10L));
-        private final CryptoManager cryptoManager;
+        private final TestCryptoProvider cryptoHandler;
 
         private MeteredRepositoryTypeA(RepositoryMetadata metadata, ClusterService clusterService) {
-            super(
-                metadata,
-                false,
-                mock(NamedXContentRegistry.class),
-                clusterService,
-                mock(RecoverySettings.class),
-                Map.of("bucket", "bucket-a")
-            );
+            super(metadata, mock(NamedXContentRegistry.class), clusterService, mock(RecoverySettings.class), Map.of("bucket", "bucket-a"));
 
             if (metadata.cryptoMetadata() != null) {
-                switch (metadata.cryptoMetadata().keyProviderType()) {
-                    case TestCryptoManagerTypeA.TYPE:
-                        cryptoManager = new TestCryptoManagerTypeA(null, metadata.cryptoMetadata().keyProviderName());
-                        break;
-                    case TestCryptoManagerTypeB.TYPE:
-                        cryptoManager = new TestCryptoManagerTypeB(null, metadata.cryptoMetadata().keyProviderName());
-                        break;
-                    default:
-                        cryptoManager = null;
-                }
+                cryptoHandler = new TestCryptoProvider(
+                    metadata.cryptoMetadata().keyProviderName(),
+                    metadata.cryptoMetadata().keyProviderType()
+                );
             } else {
-                cryptoManager = null;
+                cryptoHandler = null;
             }
         }
 
@@ -927,31 +887,18 @@ public class RepositoriesServiceTests extends OpenSearchTestCase {
     private static class MeteredRepositoryTypeB extends MeteredBlobStoreRepository {
         private static final String TYPE = "type-b";
         private static final RepositoryStats STATS = new RepositoryStats(Map.of("LIST", 20L));
-        private final CryptoManager cryptoManager;
+        private final TestCryptoProvider cryptoHandler;
 
         private MeteredRepositoryTypeB(RepositoryMetadata metadata, ClusterService clusterService) {
-            super(
-                metadata,
-                false,
-                mock(NamedXContentRegistry.class),
-                clusterService,
-                mock(RecoverySettings.class),
-                Map.of("bucket", "bucket-b")
-            );
+            super(metadata, mock(NamedXContentRegistry.class), clusterService, mock(RecoverySettings.class), Map.of("bucket", "bucket-b"));
 
             if (metadata.cryptoMetadata() != null) {
-                switch (metadata.cryptoMetadata().keyProviderType()) {
-                    case TestCryptoManagerTypeA.TYPE:
-                        cryptoManager = new TestCryptoManagerTypeA(null, metadata.cryptoMetadata().keyProviderName());
-                        break;
-                    case TestCryptoManagerTypeB.TYPE:
-                        cryptoManager = new TestCryptoManagerTypeB(null, metadata.cryptoMetadata().keyProviderName());
-                        break;
-                    default:
-                        cryptoManager = null;
-                }
+                cryptoHandler = new TestCryptoProvider(
+                    metadata.cryptoMetadata().keyProviderName(),
+                    metadata.cryptoMetadata().keyProviderType()
+                );
             } else {
-                cryptoManager = null;
+                cryptoHandler = null;
             }
         }
 
