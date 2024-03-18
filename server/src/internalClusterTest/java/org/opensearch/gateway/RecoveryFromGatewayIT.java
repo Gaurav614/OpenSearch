@@ -828,7 +828,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
             .get(discoveryNodes[0].getId())
             .getNodeGatewayStartedShardsBatch()
             .get(shardId);
-        assertNotNull(nodeGatewayStartedShards.getException());
+        assertNotNull(nodeGatewayStartedShards.storeException());
         assertNotNull(nodeGatewayStartedShards.allocationId());
         assertTrue(nodeGatewayStartedShards.primary());
     }
@@ -943,7 +943,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ShardId shardId
     ) {
         // keeping the behaviour of index not found same as existing transport, it'll return empty result
-        assertNull(nodeStoreFilesMetadata.getException());
+        assertNull(nodeStoreFilesMetadata.getStoreFileFetchException());
         TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata storeFileMetadata = nodeStoreFilesMetadata.storeFilesMetadata();
         assertEquals(shardId, storeFileMetadata.shardId());
         assertTrue(storeFileMetadata.peerRecoveryRetentionLeases().isEmpty());
@@ -953,7 +953,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         TransportNodesListShardStoreMetadataBatch.NodeStoreFilesMetadata nodeStoreFilesMetadata,
         ShardId shardId
     ) {
-        assertNull(nodeStoreFilesMetadata.getException());
+        assertNull(nodeStoreFilesMetadata.getStoreFileFetchException());
         TransportNodesListShardStoreMetadataHelper.StoreFilesMetadata storeFileMetadata = nodeStoreFilesMetadata.storeFilesMetadata();
         assertFalse(storeFileMetadata.isEmpty());
         assertEquals(shardId, storeFileMetadata.shardId());
@@ -963,7 +963,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
     private void assertNodeGatewayStartedShardsHappyCase(
         TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard nodeGatewayStartedShards
     ) {
-        assertNull(nodeGatewayStartedShards.getException());
+        assertNull(nodeGatewayStartedShards.storeException());
         assertNotNull(nodeGatewayStartedShards.allocationId());
         assertTrue(nodeGatewayStartedShards.primary());
     }
@@ -1217,7 +1217,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         internalCluster().startDataOnlyNode(Settings.builder().put("node.name", dataOnlyNodes.get(2)).put(node2DataPathSettings).build());
         ensureStableCluster(4);
 
-        health = client().admin().cluster().health(Requests.clusterHealthRequest().waitForGreenStatus().timeout("1m")).actionGet();
+        health = client().admin().cluster().health(Requests.clusterHealthRequest().waitForGreenStatus().timeout("10s")).actionGet();
 
         assertEquals(RED, health.getStatus());
         assertTrue(health.isTimedOut());

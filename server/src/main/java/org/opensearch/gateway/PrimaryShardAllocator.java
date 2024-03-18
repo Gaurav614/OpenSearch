@@ -357,7 +357,7 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
      * inSyncAllocationIds are added to the list. Otherwise, any node that has a shard is added to the list, but
      * entries with matching allocation id are always at the front of the list.
      */
-    protected static NodeShardsResult buildNodeShardsResult(
+    private static NodeShardsResult buildNodeShardsResult(
         ShardRouting shard,
         boolean matchAnyShard,
         Set<String> ignoreNodes,

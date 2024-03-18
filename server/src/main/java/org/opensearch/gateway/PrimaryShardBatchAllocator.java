@@ -144,7 +144,7 @@ public abstract class PrimaryShardBatchAllocator extends PrimaryShardAllocator {
                         shardData.allocationId(),
                         shardData.primary(),
                         shardData.replicationCheckpoint(),
-                        shardData.getException()
+                        shardData.storeException()
                     )
                 );
             }

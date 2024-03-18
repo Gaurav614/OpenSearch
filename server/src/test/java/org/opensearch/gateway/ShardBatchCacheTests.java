@@ -53,8 +53,17 @@ public class ShardBatchCacheTests extends OpenSearchAllocationTestCase {
             NodeGatewayStartedShardsBatch::new,
             NodeGatewayStartedShardsBatch::getNodeGatewayStartedShardsBatch,
             () -> new NodeGatewayStartedShard(null, false, null, null),
-            this::removeShard
+            this::removeShard,
+            NodeGatewayStartedShard::storeException,
+            this::isPrimaryResponseEmpty
         );
+    }
+
+    boolean isPrimaryResponseEmpty(TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShard primaryShardResponse) {
+        return primaryShardResponse.allocationId() == null
+            && primaryShardResponse.primary() == false
+            && primaryShardResponse.storeException() == null
+            && primaryShardResponse.replicationCheckpoint() == null;
     }
 
     public void testClearShardCache() {
@@ -128,7 +137,7 @@ public class ShardBatchCacheTests extends OpenSearchAllocationTestCase {
         assertEquals("alloc-1", fetchData.get(node1).getNodeGatewayStartedShardsBatch().get(shard).allocationId());
 
         assertEquals(10, fetchData.get(node2).getNodeGatewayStartedShardsBatch().size());
-        assertTrue(fetchData.get(node2).getNodeGatewayStartedShardsBatch().get(shard).isEmpty());
+        assertTrue(isPrimaryResponseEmpty(fetchData.get(node2).getNodeGatewayStartedShardsBatch().get(shard)));
 
         // test GetData after fetch
         assertEquals(10, shardCache.getData(node1).getNodeGatewayStartedShardsBatch().size());

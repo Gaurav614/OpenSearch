@@ -191,7 +191,7 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
         data.getData().forEach((key, value) -> {
             Map<ShardId, NodeStoreFilesMetadata> batch = value.getNodeStoreFilesMetadataBatch();
             NodeStoreFilesMetadata metadata = batch.get(unassignedShard.shardId());
-            if (metadata != null && metadata.getException() == null) {
+            if (metadata != null && metadata.getStoreFileFetchException() == null) {
                 map.put(key, metadata.storeFilesMetadata());
             }
         });

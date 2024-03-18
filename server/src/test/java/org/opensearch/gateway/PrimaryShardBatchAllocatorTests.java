@@ -294,7 +294,7 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             return this;
         }
 
-        public TestBatchAllocator addShardData(
+        public void addShardData(
             DiscoveryNode node,
             String allocationId,
             ShardId shardId,
@@ -317,7 +317,6 @@ public class PrimaryShardBatchAllocatorTests extends OpenSearchAllocationTestCas
             );
             if (data.get(node) != null) shardData.putAll(data.get(node).getNodeGatewayStartedShardsBatch());
             data.put(node, new TransportNodesListGatewayStartedShardsBatch.NodeGatewayStartedShardsBatch(node, shardData));
-            return this;
         }
 
         @Override
