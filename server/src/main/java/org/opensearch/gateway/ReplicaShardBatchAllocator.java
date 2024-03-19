@@ -55,7 +55,6 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
             List<ShardRouting> ineligibleShards = new ArrayList<>();
             // iterate over shards to check for match for each of those
             for (ShardRouting shard : shardBatch) {
-                // need to iterate over all the nodes to find matching shard
                 if (shard != null && !shard.primary()) {
                     if (shouldSkipFetchForRecovery(shard)) {
                         ineligibleShards.add(shard);
@@ -171,9 +170,8 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
         ShardRouting unassignedShard,
         FetchResult<NodeStoreFilesMetadataBatch> data
     ) {
-
         if (!data.hasData()) {
-            return new HashMap<>();
+            return null;
         }
 
         Map<DiscoveryNode, StoreFilesMetadata> map = new HashMap<>();
