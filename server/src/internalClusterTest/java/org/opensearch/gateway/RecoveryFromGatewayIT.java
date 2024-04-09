@@ -76,6 +76,7 @@ import org.opensearch.indices.store.TransportNodesListShardStoreMetadataBatch;
 import org.opensearch.indices.store.TransportNodesListShardStoreMetadataHelper;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.test.InternalSettingsPlugin;
+import org.opensearch.test.InternalTestCluster;
 import org.opensearch.test.InternalTestCluster.RestartCallback;
 import org.opensearch.test.OpenSearchIntegTestCase;
 import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
@@ -990,8 +991,8 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ensureGreen("test");
         Settings node0DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(0));
         Settings node1DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(1));
-        internalCluster().stopRandomDataNode();
-        internalCluster().stopRandomDataNode();
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataOnlyNodes.get(0)));
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataOnlyNodes.get(1)));
         ensureRed("test");
         ensureStableCluster(1);
 
@@ -1015,6 +1016,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ensureGreen("test");
         assertEquals(0, gatewayAllocator.getNumberOfStartedShardBatches());
         assertEquals(0, gatewayAllocator.getNumberOfStoreShardBatches());
+        assertEquals(0,gatewayAllocator.getNumberOfInFlightFetches());
     }
 
     public void testBatchModeDisabled() throws Exception {
@@ -1031,8 +1033,8 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         ensureGreen("test");
         Settings node0DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(0));
         Settings node1DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(1));
-        internalCluster().stopRandomDataNode();
-        internalCluster().stopRandomDataNode();
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataOnlyNodes.get(0)));
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataOnlyNodes.get(1)));
         ensureStableCluster(1);
 
         logger.info("--> Now do a protective reroute");
@@ -1086,9 +1088,8 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         Settings node1DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(1));
 
         internalCluster().stopCurrentClusterManagerNode();
-        internalCluster().stopRandomDataNode();
-        internalCluster().stopRandomDataNode();
-
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataOnlyNodes.get(0)));
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataOnlyNodes.get(1)));
         // Now start cluster manager node and post that verify batches created
         internalCluster().startClusterManagerOnlyNodes(
             1,
@@ -1175,9 +1176,9 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         Settings node2DataPathSettings = internalCluster().dataPathSettings(dataOnlyNodes.get(2));
 
         internalCluster().stopCurrentClusterManagerNode();
-        internalCluster().stopRandomDataNode();
-        internalCluster().stopRandomDataNode();
-        internalCluster().stopRandomDataNode();
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataOnlyNodes.get(0)));
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataOnlyNodes.get(1)));
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataOnlyNodes.get(2)));
 
         // Now start cluster manager node and post that verify batches created
         internalCluster().startClusterManagerOnlyNodes(
@@ -1217,7 +1218,7 @@ public class RecoveryFromGatewayIT extends OpenSearchIntegTestCase {
         internalCluster().startDataOnlyNode(Settings.builder().put("node.name", dataOnlyNodes.get(2)).put(node2DataPathSettings).build());
         ensureStableCluster(4);
 
-        health = client().admin().cluster().health(Requests.clusterHealthRequest().waitForGreenStatus().timeout("10s")).actionGet();
+        health = client().admin().cluster().health(Requests.clusterHealthRequest().waitForGreenStatus().timeout("1m")).actionGet();
 
         assertEquals(RED, health.getStatus());
         assertTrue(health.isTimedOut());
