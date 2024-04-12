@@ -276,7 +276,7 @@ public class TransportNodesListShardStoreMetadataBatch extends TransportNodesAct
             }
         }
 
-        boolean isEmpty(NodeStoreFilesMetadata response) {
+        public static boolean isEmpty(NodeStoreFilesMetadata response) {
             return response.storeFilesMetadata() == null
                 || response.storeFilesMetadata().isEmpty() && response.getStoreFileFetchException() == null;
         }
