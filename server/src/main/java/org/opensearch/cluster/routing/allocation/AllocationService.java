@@ -574,11 +574,7 @@ public class AllocationService {
              If we do not have any custom allocator set then we will be using ShardsBatchGatewayAllocator
              Currently AllocationService will not run any custom Allocator that implements allocateAllUnassignedShards
              */
-            ExistingShardsAllocator allocator = existingShardsAllocators.get(ShardsBatchGatewayAllocator.ALLOCATOR_NAME);
-            allocator.allocateAllUnassignedShards(allocation, true);
-            allocator.afterPrimariesBeforeReplicas(allocation);
-            // Replicas Assignment
-            allocator.allocateAllUnassignedShards(allocation, false);
+            allocateAllUnassignedShards(allocation);
             return;
         }
         logger.warn("Falling back to single shard assignment since batch mode disable or multiple custom allocators set");
@@ -602,6 +598,14 @@ public class AllocationService {
                 getAllocatorForShard(shardRouting, allocation).allocateUnassigned(shardRouting, allocation, replicaIterator);
             }
         }
+    }
+
+    private void allocateAllUnassignedShards(RoutingAllocation allocation) {
+        ExistingShardsAllocator allocator = existingShardsAllocators.get(ShardsBatchGatewayAllocator.ALLOCATOR_NAME);
+        allocator.allocateAllUnassignedShards(allocation, true);
+        allocator.afterPrimariesBeforeReplicas(allocation);
+        // Replicas Assignment
+        allocator.allocateAllUnassignedShards(allocation, false);
     }
 
     private void disassociateDeadNodes(RoutingAllocation allocation) {
