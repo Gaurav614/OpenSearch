@@ -10,6 +10,8 @@ package org.opensearch.gateway;
 
 import org.apache.logging.log4j.Logger;
 import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.cluster.routing.RoutingNode;
+import org.opensearch.cluster.routing.RoutingNodes;
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.routing.UnassignedInfo;
 import org.opensearch.cluster.routing.allocation.AllocateUnassignedDecision;
@@ -47,19 +49,29 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
      */
     public void processExistingRecoveries(RoutingAllocation allocation, List<List<ShardRouting>> shardBatches) {
         List<Runnable> shardCancellationActions = new ArrayList<>();
+        RoutingNodes routingNodes = allocation.routingNodes();
         // iterate through the batches, each batch needs to be processed together as fetch call should be made for shards from same batch
         for (List<ShardRouting> shardBatch : shardBatches) {
             List<ShardRouting> eligibleShards = new ArrayList<>();
             List<ShardRouting> ineligibleShards = new ArrayList<>();
+            boolean shardMatched;
             // iterate over shards to check for match for each of those
             for (ShardRouting shard : shardBatch) {
-                if (shard != null && !shard.primary()) {
-                    // need to iterate over all the nodes to find matching shard
-                    if (shouldSkipFetchForRecovery(shard)) {
-                        ineligibleShards.add(shard);
-                        continue;
+                shardMatched = false;
+                // need to iterate over all the nodes to find matching shard
+                for (RoutingNode routingNode : routingNodes) {
+                    ShardRouting shardFromRoutingNode = routingNode.getByShardId(shard.shardId());
+                    if (shardFromRoutingNode != null && !shardFromRoutingNode.primary()) {
+                        shardMatched = true;
+                        if (shouldSkipFetchForRecovery(shardFromRoutingNode)) {
+                            ineligibleShards.add(shardFromRoutingNode);
+                            continue;
+                        }
+                        eligibleShards.add(shardFromRoutingNode);
                     }
-                    eligibleShards.add(shard);
+                    if (shardMatched) {
+                        break;
+                    }
                 }
             }
             AsyncShardFetch.FetchResult<NodeStoreFilesMetadataBatch> shardState = fetchData(eligibleShards, ineligibleShards, allocation);
@@ -178,7 +190,7 @@ public abstract class ReplicaShardBatchAllocator extends ReplicaShardAllocator {
         data.getData().forEach((discoveryNode, value) -> {
             Map<ShardId, NodeStoreFilesMetadata> batch = value.getNodeStoreFilesMetadataBatch();
             NodeStoreFilesMetadata metadata = batch.get(unassignedShard.shardId());
-            if (metadata != null) {
+            if (metadata != null  && metadata.getStoreFileFetchException() == null) {
                 map.put(discoveryNode, metadata.storeFilesMetadata());
             }
         });
